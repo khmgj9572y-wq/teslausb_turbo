@@ -66,7 +66,10 @@ remove the old Pi key from the car's Locks/key list. A `driver` role may be
 less privileged than `owner`, but its compatibility with the exact commands
 must be physically tested; do not assume it works. The included
 `car-ble-unblock.service` addresses the reported Trixie rfkill case and must
-be verified after a cold boot.
+be verified after a cold boot. Install its `ble_prepare.py` helper too and
+keep the session cache under its private `/run/teslausb-ble` directory,
+rather than writing a cache onto the read-only root filesystem. See the
+bundle installation instructions for the cache symlink and configuration.
 
 ## Other gates
 
