@@ -32,6 +32,9 @@ unit; its pairing state must not be written to the read-only root. Run
 `systemctl daemon-reload` after changing the unit. No real IP, hostname,
 key, VIN, or password belongs in this repository.
 
+Set both `vpn_interface` fields to the name of the dedicated WireGuard
+interface. Put the heartbeat service's actual port in `heartbeat_url`.
+
 Generate a dedicated WireGuard key pair on the Pi and a separate SSH key for
 its restricted intake account. Check that the WireGuard private key is nonempty
 and valid before deriving its public key. A failed `wg genkey > file` command

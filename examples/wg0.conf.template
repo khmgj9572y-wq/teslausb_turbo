@@ -3,9 +3,10 @@
 [Interface]
 Address = <CAR_WG_IP>/32
 PrivateKey = <PI_PRIVATE_KEY>
+MTU = 1420
 
 [Peer]
 PublicKey = <HOME_PUBLIC_KEY>
-Endpoint = <HOME_PUBLIC_HOSTNAME_OR_IP>:51820
-AllowedIPs = <INTAKE_WG_IP>/32, <SUNSHINE_WG_IP>/32
+Endpoint = <HOME_PUBLIC_HOSTNAME_OR_IP>:<HOME_WG_PORT>
+AllowedIPs = <HOME_TUNNEL_IP>/32, <INTAKE_WG_IP>/32, <SUNSHINE_WG_IP>/32
 PersistentKeepalive = 25
