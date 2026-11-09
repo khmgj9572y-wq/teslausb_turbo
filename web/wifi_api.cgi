@@ -9,9 +9,11 @@ from urllib.parse import parse_qs, urlparse
 
 
 ADMIN = "/usr/local/lib/teslausb-car-link/wifi_admin.py"
-GET_ACTIONS = {"status", "scan"}
+VIDEO_ADMIN = "/usr/local/lib/teslausb-car-link/video_web.py"
+GET_ACTIONS = {"status", "scan", "video-status"}
 POST_ACTIONS = {"add", "delete", "permanent", "retry",
-                "portal-start", "portal-check", "portal-stop"}
+                "portal-start", "portal-check", "portal-stop",
+                "video-start", "video-stop"}
 
 
 def respond(status, value):
@@ -63,7 +65,8 @@ def main():
         return
 
     try:
-        result = subprocess.run(["sudo", "-n", ADMIN, action], input=body,
+        helper = VIDEO_ADMIN if action.startswith("video-") else ADMIN
+        result = subprocess.run(["sudo", "-n", helper, action], input=body,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                 timeout=45)
         response = json.loads(result.stdout)
@@ -72,7 +75,7 @@ def main():
         respond("200 OK" if result.returncode == 0 else "400 Bad Request", response)
     except (OSError, ValueError, subprocess.TimeoutExpired):
         respond("503 Service Unavailable",
-                {"ok": False, "error": "Wi-Fi service is unavailable"})
+                {"ok": False, "error": "Requested service is unavailable"})
 
 
 if __name__ == "__main__":

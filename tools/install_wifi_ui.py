@@ -57,6 +57,27 @@ def alternative(content):
     return replace_once(content, "</body>", NEW_SCRIPT + "\n</body>")
 
 
+def moonlight(content):
+    content = classic(content)
+    if 'id="car-moonlight-frame"' in content:
+        return content
+    content = replace_once(content, '#tab8:checked ~ .tab.content8 {',
+        '#tab8:checked ~ .tab.content8,\n#tab9:checked ~ .tab.content9 {')
+    content = replace_once(content, '#tab8:checked ~ .tabheaderholder .tablabel8 {',
+        '#tab8:checked ~ .tabheaderholder .tablabel8,\n'
+        '  #tab9:checked ~ .tabheaderholder .tablabel9 {')
+    radio = '<input class="tabradiobtn" type="radio" name="tabs" id="tab8">'
+    content = replace_once(content, radio, radio +
+        '\n  <input class="tabradiobtn" type="radio" name="tabs" id="tab9">')
+    label = '<label for="tab8" class="tablabel tablabel8">Wi-Fi</label>'
+    content = replace_once(content, label, label +
+        '\n    <label for="tab9" class="tablabel tablabel9">Moonlight</label>')
+    return replace_once(content, CLASSIC_CONTENT,
+        '  <div class="tab content9"><iframe id="car-moonlight-frame" '
+        'src="/moonlight/" title="Moonlight" '
+        'style="width:100%;height:100%;border:0"></iframe></div>\n' + CLASSIC_CONTENT)
+
+
 def nginx(content):
     if 'auth_basic off;' in content or content.count('auth_basic "Restricted Content";') < 2:
         raise ValueError("TeslaUSB web authentication is not enabled")
@@ -74,7 +95,7 @@ def main():
     args = parser.parse_args()
     paths = [args.web_root / "index.html", args.web_root / "new" / "index.html",
              args.nginx]
-    transforms = [classic, alternative, nginx]
+    transforms = [moonlight, alternative, nginx]
     updated = []
     for path, transform in zip(paths, transforms):
         original = path.read_text()

@@ -22,6 +22,11 @@ sudo install -m 600 /tmp/teslausb-car-link/examples/car-video.env /etc/teslausb-
 sudo systemctl daemon-reload
 ```
 
+Also run `sudo install -m 755 /tmp/teslausb-car-link/video_web.py /usr/local/lib/teslausb-car-link/` and copy
+`web/moonlight/index.html` to `/var/www/html/moonlight/index.html`. The CGI
+bridge and `install_wifi_ui.py` add the authenticated Moonlight controls to
+both TeslaUSB views. Keep these files together when updating the bundle.
+
 The video service runs as a non-root account and sources its settings file.
 Set `/etc/teslausb-car-video.env` to `root:<that account's group>` mode 0640
 before starting it; the file may later contain a private fallback stream URL.

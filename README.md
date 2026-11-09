@@ -28,6 +28,7 @@ checks, follow [INSTALL_BUNDLE.md](INSTALL_BUNDLE.md) one feature at a time.
 | `car_control.py` | Stop video on cap, undervoltage, link loss, or session timeout; record power flags while active. |
 | `heartbeat.py` | POST status to the intake host every five minutes and apply validated video on/off/keep replies. |
 | `player.sh` | Start Sunshine's `Desktop` stream with Moonlight Qt; direct RTSP/mpv is a fallback. |
+| `video_web.py`, `web/moonlight/` | Authenticated manual Start/Stop controls, session status, and remaining time in both web views. |
 | `video_toggle.py` | Optional GPIO button to start or stop the video service without touch. |
 | `preflight.sh` | Read-only OS, USB, HDMI, disk, and power probe. |
 | `wifi_admin.py`, `web/`, `portal_session.sh` | Password-protected Wi-Fi tab for both TeslaUSB views, temporary profiles, and a phone-controlled captive-portal browser. |
@@ -136,6 +137,13 @@ The player checks the tunnel's underlay when a stream starts. The sample uses
 running when the underlay changes keeps its current settings until it
 reconnects. The display unit targets the active Wayland desktop; adjust its
 user ID and display environment for the installed OS.
+
+Open the **Moonlight** tab in the classic web view, or the **Moonlight** link
+in the alternative view. Confirm that the car is parked, then select
+**Start Moonlight**. **Stop Moonlight** is always available. These manual
+controls keep the existing session, data, power, and network limits; starting
+an already running session does not reset its time limit. They do not enable
+heartbeat-driven remote video start.
 
 `max_session_min` defaults to 30. The control timer checks every 30 seconds
 and stops video when the limit, soft LTE cap, current undervoltage, missing
