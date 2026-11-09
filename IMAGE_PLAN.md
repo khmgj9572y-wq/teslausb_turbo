@@ -47,6 +47,14 @@ every fetched file resolves to this commit during spare-media testing.
    Do not run TeslaUSB setup against it. Only attach it to the new SD image
    after the rehearsal demonstrates no partitioning/formatting.
 
+At the pinned commit, partition setup skips creation only when the `mutable`
+and `backingfiles` labels point to the expected first and second partitions.
+Disk-image setup exits without changes only when each configured image size
+matches the existing image. A mismatch enters the recreate path; in a
+non-interactive run it may proceed without the interactive delete prompt.
+Rehearse both checks on the spare SSD and preserve exact image-size settings
+before considering the original SSD.
+
 ## BLE keep-awake
 
 The new image gets a **fresh** car BLE key generated locally. Never copy the
