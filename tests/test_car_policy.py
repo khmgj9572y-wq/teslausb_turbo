@@ -28,7 +28,14 @@ class MeterTests(unittest.TestCase):
         (stats / "tx_bytes").write_text("200")
         self.config = {"net_root": self.net, "lte_driver": "rndis_host",
                        "meter_file": root / "meter.json", "ntp_marker": "",
+                       "ssd_mountpoint": Path("/"),
                        "soft_cap_bytes": 500, "hard_cap_bytes": 1000}
+
+    def test_missing_ssd_stops_meter_without_writing_elsewhere(self):
+        self.config["ssd_mountpoint"] = self.net
+        state = policy.update_meter(self.config, boot="a", month="2026-11", sync=True)
+        self.assertTrue(state["storage_unavailable"])
+        self.assertFalse(self.config["meter_file"].exists())
 
     def counters(self, rx, tx):
         (self.iface / "statistics" / "rx_bytes").write_text(str(rx))

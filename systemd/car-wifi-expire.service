@@ -1,0 +1,8 @@
+[Unit]
+Description=Remove expired temporary Wi-Fi profiles
+RequiresMountsFor=/mutable
+ConditionPathIsMountPoint=/mutable
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/wifi_admin.py expire

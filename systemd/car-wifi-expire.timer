@@ -1,0 +1,10 @@
+[Unit]
+Description=Check temporary Wi-Fi profiles every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=car-wifi-expire.service
+
+[Install]
+WantedBy=timers.target

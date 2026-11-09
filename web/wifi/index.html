@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeslaUSB Wi-Fi</title>
+<style>
+:root { font-family: Arial, Helvetica, sans-serif; color: #202329; background: #f6f7f9; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 18px; }
+main { max-width: 850px; margin: auto; }
+h1 { font-size: 1.45rem; margin: 0 0 14px; }
+h2 { font-size: 1.05rem; margin: 0 0 12px; }
+.card { background: white; border: 1px solid #d9dee5; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.label { display: block; color: #626a76; font-size: .83rem; margin-bottom: 4px; }
+.value { font-weight: 600; overflow-wrap: anywhere; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e7eaf0; }
+.row:first-child { border-top: 0; }
+.detail { color: #626a76; font-size: .85rem; margin-top: 3px; }
+.actions { display: flex; flex-wrap: wrap; gap: 7px; }
+button, select, input { font: inherit; }
+button { border: 1px solid #bfc7d1; border-radius: 6px; background: white; padding: 7px 11px; cursor: pointer; }
+button:hover { background: #eef1f5; }
+button.primary { background: #c40000; border-color: #c40000; color: white; }
+button.primary:hover { background: #a70000; }
+button:disabled { opacity: .6; cursor: wait; }
+input[type=text], input[type=password], select { width: 100%; max-width: 500px; padding: 9px; border: 1px solid #bfc7d1; border-radius: 6px; margin: 5px 0 12px; background: white; }
+label.field { display: block; font-size: .9rem; }
+label.inline { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; font-size: .9rem; }
+#message { min-height: 1.5em; margin: 0 0 14px; color: #1e5431; }
+#message.error { color: #a40000; }
+.muted { color: #626a76; }
+.portal { border-left: 4px solid #d18b00; }
+@media (max-width: 620px) { body { padding: 10px; } .row { align-items: flex-start; flex-direction: column; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Wi-Fi</h1>
+  <p id="message" role="status" aria-live="polite"></p>
+  <section class="card">
+    <h2>Connection</h2>
+    <div class="grid">
+      <div><span class="label">Wi-Fi</span><span class="value" id="current-ssid">Checking…</span></div>
+      <div><span class="label">Signal</span><span class="value" id="current-signal">—</span></div>
+      <div><span class="label">IP address</span><span class="value" id="current-ip">—</span></div>
+      <div><span class="label">4G stick</span><span class="value" id="lte-state">Checking…</span></div>
+    </div>
+  </section>
+  <section class="card">
+    <div class="row"><h2>Nearby networks</h2><button id="scan-button" type="button">Scan</button></div>
+    <div id="nearby" class="muted">Select Scan to look for networks.</div>
+  </section>
+  <section class="card">
+    <h2>Add network</h2>
+    <form id="add-form" autocomplete="off">
+      <label class="field" for="ssid">Network name</label>
+      <input id="ssid" name="ssid" type="text" maxlength="32" required autocomplete="off">
+      <label class="inline"><input id="hidden" type="checkbox"> Hidden network (entered manually)</label>
+      <label class="field" for="password">Password (leave blank for an open network)</label>
+      <input id="password" name="password" type="password" autocomplete="new-password">
+      <label class="field" for="duration">Keep this network for</label>
+      <select id="duration">
+        <option value="1h">1 hour</option><option value="4h">4 hours</option>
+        <option value="1d">1 day</option><option value="3d">3 days</option>
+        <option value="1w">1 week</option><option value="30d">30 days</option>
+        <option value="forever">Forever</option>
+      </select>
+      <div><button class="primary" type="submit" id="add-button">Save and connect</button></div>
+    </form>
+    <p class="detail">4G stays connected while Wi-Fi is tested. A Wi-Fi network takes priority after it passes the internet check.</p>
+  </section>
+  <section class="card portal" id="portal-card" hidden>
+    <h2>Sign in to this Wi-Fi</h2>
+    <p>This network needs a browser sign-in. Open the temporary Pi browser from your phone. The 4G tunnel stays available during sign-in.</p>
+    <div class="actions">
+      <button type="button" id="portal-button">Open sign-in browser</button>
+      <button type="button" id="portal-check">Check sign-in</button>
+      <button type="button" id="portal-stop">Close browser</button>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Saved networks</h2>
+    <div id="saved" class="muted">Checking…</div>
+  </section>
+</main>
+<script>
+"use strict";
+const endpoint = "/cgi-bin/car-wifi.cgi?action=";
+const $ = id => document.getElementById(id);
+function message(text, error=false) { const node=$('message'); node.textContent=text; node.classList.toggle('error',error); }
+async function api(action, data) {
+  const options = data === undefined ? {cache:'no-store'} : {
+    method:'POST', cache:'no-store', headers:{'Content-Type':'application/json','X-Car-Wifi-Action':'1'},
+    body:JSON.stringify(data)
+  };
+  const response = await fetch(endpoint + encodeURIComponent(action), options);
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error(result.error || 'Request failed');
+  return result;
+}
+function el(tag, text, className) { const node=document.createElement(tag); if(text!==undefined) node.textContent=text; if(className) node.className=className; return node; }
+function row(title, detail) { const item=el('div',undefined,'row'); const info=el('div'); info.append(el('strong',title),el('div',detail,'detail')); item.append(info); return item; }
+function actionButton(label, handler) { const button=el('button',label); button.type='button'; button.addEventListener('click',handler); return button; }
+function timeLeft(seconds) {
+  if(seconds===null) return 'Expires after the clock synchronizes';
+  if(seconds<3600) return Math.max(1,Math.ceil(seconds/60)) + ' minutes left';
+  if(seconds<86400) return Math.ceil(seconds/3600) + ' hours left';
+  return Math.ceil(seconds/86400) + ' days left';
+}
+async function refresh() {
+  try {
+    const data=await api('status');
+    $('current-ssid').textContent=data.ssid || 'Disconnected';
+    $('current-signal').textContent=data.signal===null ? '—' : data.signal + '%';
+    $('current-ip').textContent=data.ip || '—';
+    $('lte-state').textContent=data.lte.up ? 'Connected' : 'Unavailable';
+    const saved=$('saved'); saved.replaceChildren();
+    let hasPortal=false;
+    if(!data.saved.length) saved.textContent='No saved networks.';
+    for(const network of data.saved) {
+      let detail=network.permanent ? 'Permanent' : timeLeft(network.remaining_seconds);
+      if(network.state==='failed') detail+=' · Connection failed';
+      if(network.state==='portal') { detail+=' · Needs sign-in'; hasPortal=true; }
+      const item=row(network.name,detail);
+      if(!network.protected) {
+        const buttons=el('div',undefined,'actions');
+        if(network.state!=='ready') buttons.append(actionButton('Retry',()=>change('retry',network.uuid)));
+        if(!network.permanent) buttons.append(actionButton('Make permanent',()=>change('permanent',network.uuid)));
+        buttons.append(actionButton('Delete',()=>change('delete',network.uuid)));
+        item.append(buttons);
+      }
+      saved.append(item);
+    }
+    $('portal-card').hidden=!hasPortal;
+  } catch(error) { message(error.message,true); }
+}
+async function scan() {
+  const button=$('scan-button'); button.disabled=true;
+  try {
+    const data=await api('scan'); const area=$('nearby'); area.replaceChildren();
+    if(!data.networks.length) area.textContent='No networks found. Enter the name manually.';
+    for(const network of data.networks) {
+      const item=row(network.ssid,network.signal+'% · '+(network.security||'Open'));
+      item.append(actionButton('Select',()=>{ $('ssid').value=network.ssid; $('hidden').checked=false; $('password').focus(); }));
+      area.append(item);
+    }
+  } catch(error) { message(error.message,true); }
+  finally { button.disabled=false; }
+}
+async function change(action, uuid) {
+  if(action==='delete' && !confirm('Delete this saved network?')) return;
+  try {
+    const result=await api(action,{uuid});
+    message(action==='retry' ? result.state==='ready' ? 'Wi-Fi connected.' : result.state==='portal' ? 'Wi-Fi needs browser sign-in.' : 'Wi-Fi connection failed.' : 'Network updated.',result.state==='failed');
+    await refresh();
+  } catch(error) { message(error.message,true); }
+}
+$('add-form').addEventListener('submit',async event=>{
+  event.preventDefault(); const button=$('add-button'); button.disabled=true; message('Trying the network…');
+  const data={ssid:$('ssid').value,password:$('password').value,hidden:$('hidden').checked,duration:$('duration').value};
+  try {
+    const result=await api('add',data);
+    message(result.state==='ready' ? 'Wi-Fi connected.' : result.state==='portal' ? 'Wi-Fi needs browser sign-in.' : 'Wi-Fi connection failed.',result.state==='failed');
+    await refresh();
+  } catch(error) { message(error.message,true); }
+  finally { data.password=''; $('password').value=''; button.disabled=false; }
+});
+$('scan-button').addEventListener('click',scan);
+$('portal-button').addEventListener('click',async()=>{
+  try { const result=await api('portal-start',{}); window.location.assign(result.url); }
+  catch(error) { message(error.message,true); }
+});
+$('portal-check').addEventListener('click',async()=>{
+  try { const result=await api('portal-check',{}); message(result.state==='ready' ? 'Sign-in complete. Wi-Fi now has priority.' : 'Sign-in is still required.'); await refresh(); }
+  catch(error) { message(error.message,true); }
+});
+$('portal-stop').addEventListener('click',async()=>{
+  try { await api('portal-stop',{}); message('Sign-in browser closed. 4G remains available.'); }
+  catch(error) { message(error.message,true); }
+});
+refresh(); setInterval(refresh,30000);
+</script>
+</body>
+</html>

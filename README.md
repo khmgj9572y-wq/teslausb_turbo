@@ -30,6 +30,7 @@ checks, follow [INSTALL_BUNDLE.md](INSTALL_BUNDLE.md) one feature at a time.
 | `player.sh` | Start Sunshine's `Desktop` stream with Moonlight Qt; direct RTSP/mpv is a fallback. |
 | `video_toggle.py` | Optional GPIO button to start or stop the video service without touch. |
 | `preflight.sh` | Read-only OS, USB, HDMI, disk, and power probe. |
+| `wifi_admin.py`, `web/`, `portal_session.sh` | Password-protected Wi-Fi tab for both TeslaUSB views, temporary profiles, and a phone-controlled captive-portal browser. |
 | `examples/80-ik41us-rndis.network` | RNDIS-only DHCP profile with LTE route metric 700. |
 | `systemd/` | Event, guard, policy, heartbeat, BLE unblock, and video units. |
 
@@ -99,6 +100,19 @@ limited to three per hour. A sleeping car may report `not attached` or
 `suspended`; observe this physically before enabling the service by default.
 
 ## Network and video
+
+The Wi-Fi picker is served by TeslaUSB's existing authenticated web server.
+It lists current Wi-Fi and LTE status, nearby networks, and saved profiles.
+New profiles and expiration state live on `/mutable`; root-only keyfile copies
+under `/run/NetworkManager/system-connections` are loaded after reboot.
+Existing home and shop profiles are shown but cannot be deleted from the tab.
+A new network starts with a lower route priority than LTE. After it passes an
+internet check, it becomes the preferred route. A captive portal leaves LTE
+preferred and offers a temporary browser on the Pi, controlled from the
+phone through the authenticated web UI. That browser uses a virtual display,
+so the car screen does not need touch input. Its session ends after 15 minutes
+and restores the routes. Wi-Fi passwords are never included in command-line
+arguments or web responses; root-only profile files hold them on the Pi.
 
 The sample WireGuard peer routes only the home intake and Sunshine hosts and
 uses `PersistentKeepalive=25`. Generate the Pi key pair on the Pi at install;

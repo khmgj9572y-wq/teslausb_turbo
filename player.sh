@@ -28,10 +28,26 @@ esac
 
 while :; do
     if [ "$backend" = moonlight ]; then
+        bitrate=${MOONLIGHT_BITRATE_KBPS:-4000}
+        lte_interface=
+        for driver in /sys/class/net/*/device/driver; do
+            [ -L "$driver" ] || continue
+            if [ "$(basename "$(readlink -f "$driver")")" = rndis_host ]; then
+                lte_interface=${driver#/sys/class/net/}
+                lte_interface=${lte_interface%%/*}
+                break
+            fi
+        done
+        if [ -n "$lte_interface" ] && [ -n "${WG_ENDPOINT_IP:-}" ]; then
+            route=$(ip -4 route get "$WG_ENDPOINT_IP" 2>/dev/null || true)
+            case " $route " in
+                *" dev $lte_interface "*) bitrate=${MOONLIGHT_LTE_BITRATE_KBPS:-1500} ;;
+            esac
+        fi
         set -- stream "$MOONLIGHT_HOST" "$MOONLIGHT_APP" \
             --resolution "${MOONLIGHT_RESOLUTION:-1280x720}" \
             --fps "${MOONLIGHT_FPS:-30}" \
-            --bitrate "${MOONLIGHT_BITRATE_KBPS:-4000}" \
+            --bitrate "$bitrate" --packet-size "${MOONLIGHT_PACKET_SIZE:-1024}" \
             --video-codec H.264 --video-decoder hardware \
             --display-mode fullscreen --no-vsync --audio-on-host
         moonlight-qt "$@" || true

@@ -16,6 +16,10 @@ import heartbeat
 
 
 class ControlTests(unittest.TestCase):
+    def test_missing_ssd_blocks_video(self):
+        config = {"soft_cap_bytes": 40, "hard_cap_bytes": 60}
+        self.assertEqual(car_control.video_allowed(
+            config, {"storage_unavailable": True})[1], "queue SSD unavailable")
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

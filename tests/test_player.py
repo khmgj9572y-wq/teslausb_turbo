@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PlayerTests(unittest.TestCase):
-    def test_moonlight_backend_builds_headless_stream_command(self):
+    def test_moonlight_backend_builds_stream_command(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             config = root / "video.env"
@@ -33,6 +33,8 @@ class PlayerTests(unittest.TestCase):
             self.assertEqual(args[0:3], ["stream", "192.0.2.10", "Desktop"])
             self.assertIn("--video-decoder", args)
             self.assertIn("hardware", args)
+            self.assertIn("--packet-size", args)
+            self.assertIn("1024", args)
 
 
 if __name__ == "__main__":

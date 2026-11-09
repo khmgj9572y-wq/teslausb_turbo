@@ -117,40 +117,45 @@ def utc_month():
 
 def update_meter(config, boot=None, month=None, sync=None):
     path = config["meter_file"]
+    if not os.path.ismount(config["ssd_mountpoint"]):
+        return {"storage_unavailable": True, "link_present": False, "bytes": 0}
     boot = boot or Path("/proc/sys/kernel/random/boot_id").read_text().strip()
     sync = ntp_synced(config) if sync is None else sync
     month = (month or utc_month()) if sync else None
-    with file_lock(str(path) + ".lock"):
-        state = read_json(path)
-        iface = find_lte_interface(config)
-        if iface is None:
-            state["link_present"] = False
+    try:
+        with file_lock(str(path) + ".lock"):
+            state = read_json(path)
+            iface = find_lte_interface(config)
+            if iface is None:
+                state["link_present"] = False
+                write_json(path, state)
+                return state
+            try:
+                rx = int((iface / "statistics" / "rx_bytes").read_text())
+                tx = int((iface / "statistics" / "tx_bytes").read_text())
+                ifindex = int((iface / "ifindex").read_text())
+            except (OSError, ValueError):
+                return state
+            old_month = state.get("month")
+            if month and old_month and month > old_month:
+                state["bytes"] = 0
+            if month and (not old_month or month > old_month):
+                state["month"] = month
+            same_counter = (state.get("boot") == boot and
+                            state.get("ifindex") == ifindex and
+                            state.get("interface") == iface.name)
+            if same_counter and rx >= int(state.get("rx", 0)) and tx >= int(state.get("tx", 0)):
+                delta = rx - int(state.get("rx", 0)) + tx - int(state.get("tx", 0))
+            else:
+                delta = rx + tx
+            state["bytes"] = int(state.get("bytes", 0)) + delta
+            state.update({"boot": boot, "interface": iface.name,
+                          "link_present": True, "ifindex": ifindex, "rx": rx, "tx": tx,
+                          "sample_uptime": uptime()})
             write_json(path, state)
             return state
-        try:
-            rx = int((iface / "statistics" / "rx_bytes").read_text())
-            tx = int((iface / "statistics" / "tx_bytes").read_text())
-            ifindex = int((iface / "ifindex").read_text())
-        except (OSError, ValueError):
-            return state
-        old_month = state.get("month")
-        if month and old_month and month > old_month:
-            state["bytes"] = 0
-        if month and (not old_month or month > old_month):
-            state["month"] = month
-        same_counter = (state.get("boot") == boot and
-                        state.get("ifindex") == ifindex and
-                        state.get("interface") == iface.name)
-        if same_counter and rx >= int(state.get("rx", 0)) and tx >= int(state.get("tx", 0)):
-            delta = rx - int(state.get("rx", 0)) + tx - int(state.get("tx", 0))
-        else:
-            delta = rx + tx
-        state["bytes"] = int(state.get("bytes", 0)) + delta
-        state.update({"boot": boot, "interface": iface.name,
-                      "link_present": True, "ifindex": ifindex, "rx": rx, "tx": tx,
-                      "sample_uptime": uptime()})
-        write_json(path, state)
-        return state
+    except OSError:
+        return {"storage_unavailable": True, "link_present": False, "bytes": 0}
 
 
 def cap_mode(config, state):

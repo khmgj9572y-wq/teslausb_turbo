@@ -1,0 +1,14 @@
+[Unit]
+Description=Temporary Pi browser for captive Wi-Fi sign-in
+After=NetworkManager.service
+RequiresMountsFor=/mutable
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/teslausb-car-wifi.env
+ExecStart=/usr/local/lib/teslausb-car-link/portal_session.sh
+ExecStopPost=/usr/local/lib/teslausb-car-link/portal_cleanup.sh
+RuntimeMaxSec=900
+TimeoutStopSec=10
+KillMode=control-group
+Restart=no

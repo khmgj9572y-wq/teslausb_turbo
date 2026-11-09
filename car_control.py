@@ -63,6 +63,8 @@ def wg_handshake_recent(interface, max_age):
 
 def video_allowed(config, state=None):
     state = car_policy.update_meter(config) if state is None else state
+    if state.get("storage_unavailable"):
+        return False, "queue SSD unavailable"
     if car_policy.cap_mode(config, state) != "normal":
         return False, "LTE data cap"
     flags = car_policy.current_throttle_flags()
@@ -96,6 +98,12 @@ def tick(config):
     meter = car_policy.update_meter(config)
     active = video_active(config)
     uploading = UPLOAD_MARKER.exists()
+    if meter.get("storage_unavailable"):
+        if uploading:
+            systemctl("stop", "car-event-send.service")
+        if active:
+            systemctl("stop", config["video_service"])
+        return "queue SSD unavailable; active transfers and video stopped"
     flags = car_policy.current_throttle_flags()
     up = car_policy.uptime()
     if active or uploading:

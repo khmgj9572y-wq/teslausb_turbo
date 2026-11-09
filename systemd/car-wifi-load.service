@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore managed Wi-Fi profiles from the writable SSD
+After=NetworkManager.service
+RequiresMountsFor=/mutable
+ConditionPathIsMountPoint=/mutable
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/wifi_admin.py load
+
+[Install]
+WantedBy=multi-user.target

@@ -15,12 +15,29 @@ installation, then reboot after the first validation to restore read-only.
 ```sh
 sudo /root/bin/remountfs_rw
 sudo install -d -m 755 /usr/local/lib/teslausb-car-link
-sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /usr/local/lib/teslausb-car-link/
+sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /tmp/teslausb-car-link/wifi_admin.py /tmp/teslausb-car-link/portal_session.sh /tmp/teslausb-car-link/portal_cleanup.sh /usr/local/lib/teslausb-car-link/
 sudo install -m 644 /tmp/teslausb-car-link/systemd/* /etc/systemd/system/
 sudo install -m 600 /tmp/teslausb-car-link/examples/teslausb-car-link.ini /etc/teslausb-car-link.ini
 sudo install -m 600 /tmp/teslausb-car-link/examples/car-video.env /etc/teslausb-car-video.env
 sudo systemctl daemon-reload
 ```
+
+The video service runs as a non-root account and sources its settings file.
+Set `/etc/teslausb-car-video.env` to `root:<that account's group>` mode 0640
+before starting it; the file may later contain a private fallback stream URL.
+
+For the Wi-Fi tab, install Debian's `xvfb`, `x11vnc`, `websockify`, and
+`novnc` packages while root is writable. Copy `web/wifi/` to
+`/var/www/html/wifi/` and `web/wifi_api.cgi` to
+`/var/www/html/cgi-bin/car-wifi.cgi`. Set `PORTAL_USER` in root-owned,
+mode-0600 `/etc/teslausb-car-wifi.env` to the Pi's non-root account. Run
+`tools/install_wifi_ui.py` after confirming TeslaUSB's nginx Basic auth is
+enabled; it adds the Wi-Fi entry to the classic and alternative views and a
+protected local noVNC reverse proxy. Check `nginx -t` before reloading.
+Enable `car-wifi-load.service` and `car-wifi-expire.timer` after testing the
+page. Temporary profiles are copied from `/mutable` into NetworkManager's
+supported `/run` keyfile directory at boot; the original profiles are not
+modified. Test a portal with LTE connected before relying on phone sign-in.
 
 Edit `/etc/teslausb-car-link.ini` and `/etc/teslausb-car-video.env`: replace
 every `REPLACE_...` value. Set the `User=` placeholder in
@@ -31,6 +48,10 @@ account its owner. Pair Moonlight with `HOME`, `XDG_CONFIG_HOME`,
 unit; its pairing state must not be written to the read-only root. Run
 `systemctl daemon-reload` after changing the unit. No real IP, hostname,
 key, VIN, or password belongs in this repository.
+On a Wayland desktop, also replace `REPLACE_WITH_OS_UID` in
+`car-video.service` with that account's numeric UID so Moonlight can use the
+active display socket. The service targets the running desktop rather than a
+separate console.
 
 Set both `vpn_interface` fields to the name of the dedicated WireGuard
 interface. Put the heartbeat service's actual port in `heartbeat_url`.

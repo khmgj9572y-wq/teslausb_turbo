@@ -1,6 +1,6 @@
 [Unit]
 Description=Enforce car video, power, and LTE policy
-RequiresMountsFor=/backingfiles /mutable
+After=network-online.target
 
 [Service]
 Type=oneshot
