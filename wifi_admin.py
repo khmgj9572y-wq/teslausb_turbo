@@ -17,11 +17,12 @@ import time
 import uuid as uuidlib
 from pathlib import Path
 
+import radio_policy
+
 
 STORE = Path("/mutable/car-link/wifi")
 RUNTIME = Path("/run/NetworkManager/system-connections")
 META = STORE / "profiles.json"
-WLAN = "wlan0"
 PROBE_URL = "https://connectivitycheck.gstatic.com/generate_204"
 DURATIONS = {"1h": 3600, "4h": 4 * 3600, "1d": 86400,
              "3d": 3 * 86400, "1w": 7 * 86400, "30d": 30 * 86400,
@@ -140,13 +141,16 @@ def runtime_file(identifier):
 
 
 def create_keyfile(identifier, ssid, password, hidden, autoconnect=False,
-                   metric=800):
+                   metric=800, uplink_mac=None):
+    if not uplink_mac or not radio_policy.MAC.fullmatch(uplink_mac.lower()):
+        raise ValueError('Uplink radio MAC is required')
     profile_id = "carwifi-" + identifier[:8]
     lines = ["[connection]", "id=" + profile_id, "uuid=" + identifier,
-             "type=wifi", "interface-name=" + WLAN,
+             "type=wifi",
              "autoconnect=" + str(autoconnect).lower(),
              "autoconnect-priority=-50", "", "[wifi]",
-             "mode=infrastructure", "ssid=" + keyfile_value(ssid),
+             "mode=infrastructure", "mac-address=" + uplink_mac.lower(),
+             "cloned-mac-address=permanent", "ssid=" + keyfile_value(ssid),
              "hidden=" + str(bool(hidden)).lower()]
     if password:
         lines += ["", "[wifi-security]", "key-mgmt=wpa-psk",
@@ -164,13 +168,13 @@ def stage(identifier):
 
 
 def is_connected(identifier):
-    result = nmcli("-g", "GENERAL.CON-UUID", "device", "show", WLAN,
+    result = nmcli("-g", "GENERAL.CON-UUID", "device", "show", radio_policy.require_uplink(),
                    check=False)
     return result.returncode == 0 and result.stdout.strip() == identifier
 
 
 def internet_on_wifi():
-    result = command(["curl", "--interface", "if!" + WLAN, "--silent",
+    result = command(["curl", "--interface", "if!" + radio_policy.require_uplink(), "--silent",
                       "--output", "/dev/null", "--write-out", "%{http_code}",
                       "--max-time", "8", PROBE_URL], timeout=12, check=False)
     return result.returncode == 0 and result.stdout == "204"
@@ -186,7 +190,7 @@ def promote(identifier):
     elif "autoconnect=true" not in text or text.count("route-metric=600") != 2:
         raise RuntimeError("Stored network is not in the expected state")
     stage(identifier)
-    nmcli("device", "reapply", WLAN)
+    nmcli("device", "reapply", radio_policy.require_uplink())
 
 
 def connect(identifier, profiles):
@@ -194,7 +198,7 @@ def connect(identifier, profiles):
         raise ValueError("This network is protected")
     profile = profiles[identifier]
     result = nmcli("-w", "25", "connection", "up", "uuid", identifier,
-                   "ifname", WLAN, timeout=30, check=False)
+                   "ifname", radio_policy.require_uplink(), timeout=30, check=False)
     if result.returncode or not is_connected(identifier):
         profile["state"] = "failed"
     elif internet_on_wifi():
@@ -208,7 +212,7 @@ def connect(identifier, profiles):
 
 
 def active_portal(profiles):
-    result = nmcli("-g", "GENERAL.CON-UUID", "device", "show", WLAN,
+    result = nmcli("-g", "GENERAL.CON-UUID", "device", "show", radio_policy.require_uplink(),
                    check=False)
     identifier = result.stdout.strip()
     if identifier not in profiles or profiles[identifier].get("state") != "portal":
@@ -270,7 +274,8 @@ def add(data):
     identifier = str(uuidlib.uuid4())
     expires = None if DURATIONS[duration] is None else int(time.time()) + DURATIONS[duration]
     atomic_write(profile_file(identifier), create_keyfile(
-        identifier, ssid, password, hidden))
+        identifier, ssid, password, hidden,
+        uplink_mac=radio_policy.permanent_mac(radio_policy.require_uplink())))
     profiles[identifier] = {"ssid": ssid, "expires": expires,
                             "state": "pending", "checked_at": None}
     save_metadata(profiles)
@@ -314,7 +319,7 @@ def load():
 
 def scan():
     result = nmcli("-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "device",
-                   "wifi", "list", "ifname", WLAN, "--rescan", "yes",
+                   "wifi", "list", "ifname", radio_policy.require_uplink(), "--rescan", "yes",
                    timeout=20)
     found = {}
     for line in result.stdout.splitlines():
@@ -357,6 +362,8 @@ def status():
         if len(fields) != 3 or fields[2] not in ("wifi", "802-11-wireless"):
             continue
         name, identifier, _ = fields
+        if name == 'car-hotspot':
+            continue
         managed = profiles.get(identifier)
         expires = managed.get("expires") if managed else None
         saved.append({"name": managed["ssid"] if managed else name,
@@ -365,9 +372,10 @@ def status():
                       "remaining_seconds": max(0, expires - now) if
                       expires is not None and now is not None else None,
                       "state": managed.get("state") if managed else "existing"})
-    active = nmcli("-g", "GENERAL.CONNECTION", "device", "show", WLAN,
+    interface = radio_policy.require_uplink()
+    active = nmcli("-g", "GENERAL.CONNECTION", "device", "show", interface,
                    check=False).stdout.strip()
-    address = command(["ip", "-4", "-o", "addr", "show", "dev", WLAN],
+    address = command(["ip", "-4", "-o", "addr", "show", "dev", interface],
                       timeout=4, check=False).stdout
     match = re.search(r"\binet\s+(\S+)", address)
     wifi = scan_active()
@@ -378,7 +386,7 @@ def status():
 
 def scan_active():
     result = nmcli("-t", "-f", "IN-USE,SSID,SIGNAL", "device", "wifi",
-                   "list", "ifname", WLAN, "--rescan", "no", check=False)
+                   "list", "ifname", radio_policy.require_uplink(), "--rescan", "no", check=False)
     for line in result.stdout.splitlines():
         fields = split_terse(line)
         if len(fields) == 3 and fields[0] == "*":

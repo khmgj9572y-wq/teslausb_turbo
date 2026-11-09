@@ -1,0 +1,27 @@
+[Unit]
+Description=Hotspot AirPlay receiver
+Requires=car-hotspot-dhcp.service
+After=car-hotspot-dhcp.service display-manager.service avahi-daemon.service
+Wants=avahi-daemon.service
+RequiresMountsFor=/mutable
+
+[Service]
+Type=simple
+User=REPLACE_WITH_OS_USER
+WorkingDirectory=/mutable/car-link/airplay
+Environment=HOME=/mutable/car-link/airplay
+Environment=XDG_CONFIG_HOME=/mutable/car-link/airplay/config
+Environment=XDG_CACHE_HOME=/mutable/car-link/airplay/cache
+Environment=XDG_RUNTIME_DIR=/run/user/REPLACE_WITH_OS_UID
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/REPLACE_WITH_OS_UID/bus
+ExecStartPre=+/usr/local/lib/teslausb-car-link/radio_services.py airplay-prepare
+ExecStart=/usr/local/lib/teslausb-car-link/airplay_receiver.py
+ExecStopPost=+/usr/local/lib/teslausb-car-link/display_owner.py release-any
+ExecStopPost=+/usr/local/lib/teslausb-car-link/radio_services.py airplay-cleanup
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

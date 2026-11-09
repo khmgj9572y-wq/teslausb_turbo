@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 import car_policy
+import display_owner
 
 
 RUNTIME = Path("/run/teslausb-car-link")
@@ -62,6 +63,8 @@ def wg_handshake_recent(interface, max_age):
 
 
 def video_allowed(config, state=None):
+    if display_owner.busy():
+        return False, 'AirPlay is using the screen'
     state = car_policy.update_meter(config) if state is None else state
     if state.get("storage_unavailable"):
         return False, "queue SSD unavailable"
@@ -97,16 +100,19 @@ def append_power_log(config, flags, up):
 def tick(config):
     meter = car_policy.update_meter(config)
     active = video_active(config)
+    airplay = display_owner.busy()
     uploading = UPLOAD_MARKER.exists()
     if meter.get("storage_unavailable"):
         if uploading:
             systemctl("stop", "car-event-send.service")
         if active:
             systemctl("stop", config["video_service"])
+        if airplay:
+            systemctl('stop', 'car-airplay.service')
         return "queue SSD unavailable; active transfers and video stopped"
     flags = car_policy.current_throttle_flags()
     up = car_policy.uptime()
-    if active or uploading:
+    if active or uploading or airplay:
         marker = RUNTIME / "last-power-log.json"
         previous = car_policy.read_json(marker)
         if up - float(previous.get("uptime", -100000)) >= 60:
@@ -114,6 +120,9 @@ def tick(config):
             car_policy.write_json(marker, {"uptime": up})
     if uploading and (flags is None or flags & 0x1):
         systemctl("stop", "car-event-send.service")
+    if airplay and (flags is None or flags & 0x1):
+        systemctl('stop', 'car-airplay.service')
+        return 'AirPlay stopped: undervoltage or unknown power state'
     if not active:
         return "video already off"
     allowed, reason = video_allowed(config, meter)
@@ -146,7 +155,7 @@ def tick(config):
 
 def apply_video_command(config, command):
     if command == "off":
-        systemctl("stop", config["video_service"])
+        display_owner.stop_video(config)
         return "off"
     if command == "on":
         if not config.get("remote_video_on_enabled", False):

@@ -15,14 +15,15 @@ installation, then reboot after the first validation to restore read-only.
 ```sh
 sudo /root/bin/remountfs_rw
 sudo install -d -m 755 /usr/local/lib/teslausb-car-link
-sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /tmp/teslausb-car-link/wifi_admin.py /tmp/teslausb-car-link/portal_session.sh /tmp/teslausb-car-link/portal_cleanup.sh /usr/local/lib/teslausb-car-link/
+sudo install -m 755 /tmp/teslausb-car-link/radio_policy.py /tmp/teslausb-car-link/display_owner.py /usr/local/lib/teslausb-car-link/
+sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /tmp/teslausb-car-link/wifi_admin.py /tmp/teslausb-car-link/video_web.py /tmp/teslausb-car-link/portal_session.sh /tmp/teslausb-car-link/portal_cleanup.sh /usr/local/lib/teslausb-car-link/
 sudo install -m 644 /tmp/teslausb-car-link/systemd/* /etc/systemd/system/
 sudo install -m 600 /tmp/teslausb-car-link/examples/teslausb-car-link.ini /etc/teslausb-car-link.ini
 sudo install -m 600 /tmp/teslausb-car-link/examples/car-video.env /etc/teslausb-car-video.env
 sudo systemctl daemon-reload
 ```
 
-Also run `sudo install -m 755 /tmp/teslausb-car-link/video_web.py /usr/local/lib/teslausb-car-link/` and copy
+Copy
 `web/moonlight/index.html` to `/var/www/html/moonlight/index.html`. The CGI
 bridge and `install_wifi_ui.py` add the authenticated Moonlight controls to
 both TeslaUSB views. Keep these files together when updating the bundle.
@@ -75,6 +76,33 @@ do one harmless file first. Home then hard-links each completed file into
 the final archive only if absent, and owns staging cleanup.
 
 ## Enable one feature at a time
+
+For the optional MT7921AU/onboard hotspot split, run
+`sudo bash tools/install_radios_airplay.sh` from this checkout. It backs up
+the installed modules and network settings on the Pi, installs packaged
+UxPlay and GStreamer dependencies, builds the scoped DNS-SD library, and
+stages the hotspot/receiver units. It leaves the current uplink in place and
+does not enable the split or rewrite nginx/Caddy access rules.
+
+When the MT7921AU arrives, first connect a temporary cloned station profile
+named `car-uplink-probe` on it, preserving the onboard uplink during the test.
+Use metric 650 for that probe so it stays behind the old uplink at 600.
+After confirming internet access through the new adapter, run
+`rebind_uplink.py --apply` with root writable. The helper saves private
+profile backups on the SD, binds saved station profiles and picker profiles
+to the new permanent MAC, and provisions a root-only hotspot password at
+`/mutable/car-link/radios/hotspot.pass`. Activate the saved uplink profile on
+the MT7921AU, verify its route and tunnel, then enable/start
+`car-hotspot.service`, `car-hotspot-dhcp.service`, and `car-airplay.service`.
+Remove the temporary probe profile after success. The new adapter may get a
+different DHCP address; update a home DHCP reservation if one is required.
+Restore read-only root after cutover. If connectivity fails, restore the
+private profile backups and the onboard uplink before enabling the hotspot.
+
+Verify discovery only on the hotspot, actual phone mirroring, screen handoff,
+and HDMI audio before relying on it. Recheck power with SSD writes, LTE
+transmission, hotspot traffic, and decoding together. The old high-draw USB
+Wi-Fi adapter should be unplugged; the active radios may need a powered hub.
 
 1. With the vehicle parked, run `gadget_guard.py once` only after confirming
    TeslaUSB's gadget is meant to be connected. Observe one home archive cycle

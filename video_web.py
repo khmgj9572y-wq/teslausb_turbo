@@ -6,6 +6,7 @@ import sys
 
 import car_control
 import car_policy
+import display_owner
 
 
 def status(policy):
@@ -15,7 +16,7 @@ def status(policy):
     if active and started.get("boot") == car_control.boot_id():
         remaining = max(0, int(policy["max_session_seconds"] -
                                (car_policy.uptime() - started.get("uptime", 0))))
-    return {"ok": True, "active": active, "remaining_seconds": remaining,
+    return {"ok": True, "active": active, "airplay_active": display_owner.busy(), "remaining_seconds": remaining,
             "max_session_minutes": policy["max_session_seconds"] // 60}
 
 
@@ -23,7 +24,7 @@ def act(policy, action, request):
     if action == "video-status":
         return status(policy)
     if action == "video-stop":
-        if not car_control.systemctl("stop", policy["video_service"]):
+        if not display_owner.stop_video(policy):
             raise RuntimeError("Moonlight could not be stopped")
         return status(policy)
     if action != "video-start":

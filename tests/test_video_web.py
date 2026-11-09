@@ -1,5 +1,6 @@
 import sys
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,6 +10,12 @@ import video_web
 
 class VideoWebTests(unittest.TestCase):
     def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        for attribute, name in [('STATE', 'owner.json'), ('LOCK', 'display.lock')]:
+            patcher = patch.object(video_web.display_owner, attribute, Path(self.temp.name) / name)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.policy = {"video_service": "car-video.service",
                        "max_session_seconds": 1800}
 

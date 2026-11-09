@@ -3,9 +3,9 @@
 state=/run/car-wifi-portal/route
 [ -f "$state" ] || exit 0
 mapfile -t route < "$state"
-if [ "${#route[@]}" -eq 4 ]
+if [ "${#route[@]}" -eq 5 ]
 then
-  ip route del default via "${route[3]}" dev wlan0 metric 550 2>/dev/null || true
+  ip route del default via "${route[3]}" dev "${route[4]}" metric 550 2>/dev/null || true
   ip route del "${route[0]}/32" via "${route[1]}" dev "${route[2]}" 2>/dev/null || true
 fi
 if ip -4 route show default | grep -q ' metric 550$'

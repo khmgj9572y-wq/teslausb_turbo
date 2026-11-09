@@ -43,12 +43,13 @@ nav { margin-top:20px; } nav a { color:#626a76; margin-right:18px; }
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
-let active=false, busy=false;
-function buttons() { $('start').disabled=busy || active || !$('parked').checked; $('stop').disabled=busy; }
+let active=false, busy=false, airplay=false;
+function buttons() { $('start').disabled=busy || active || airplay || !$('parked').checked; $('stop').disabled=busy; }
 function render(data) {
   active=data.active;
-  $('state').textContent=active ? 'Moonlight is running' : 'Moonlight is stopped';
-  $('session').textContent=active && data.remaining_seconds!==null ?
+  airplay=Boolean(data.airplay_active);
+  $('state').textContent=airplay ? 'AirPlay is using the screen' : active ? 'Moonlight is running' : 'Moonlight is stopped';
+  $('session').textContent=airplay ? 'Moonlight is paused while AirPlay is connected.' : active && data.remaining_seconds!==null ?
     Math.ceil(data.remaining_seconds/60)+' minutes remaining' :
     'Automatic stop after '+data.max_session_minutes+' minutes';
   buttons();

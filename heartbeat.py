@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import car_control
 import car_policy
 import gadget_guard
+import radio_policy
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -62,7 +63,7 @@ def payload(policy, guard_config, spool_root, snapshot_root):
         link_type = "offline"
     elif iface is not None and link == iface.name:
         link_type = "lte"
-    elif link == "wlan0":
+    elif link == radio_policy.uplink_interface(policy.get('net_root')):
         link_type = "wifi"
     else:
         link_type = link

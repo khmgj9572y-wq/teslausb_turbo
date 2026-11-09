@@ -1,0 +1,14 @@
+[Unit]
+Description=Onboard car hotspot
+After=NetworkManager.service
+RequiresMountsFor=/mutable
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/teslausb-car-link/radio_services.py hotspot-up
+ExecStop=/usr/local/lib/teslausb-car-link/radio_services.py hotspot-down
+TimeoutStartSec=45
+
+[Install]
+WantedBy=multi-user.target

@@ -14,6 +14,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+import radio_policy
+
 
 def load_policy(path):
     parser = configparser.ConfigParser(interpolation=None)
@@ -192,7 +194,9 @@ def home_wifi_reachable(config):
         route = subprocess.run(["ip", "route", "get", address],
                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                universal_newlines=True, timeout=3)
-        if route.returncode != 0 or not re.search(r"\bdev wlan0\b", route.stdout):
+        uplink = radio_policy.uplink_interface(config.get('net_root'))
+        if not uplink or route.returncode != 0 or not re.search(
+                r"\bdev\s+" + re.escape(uplink) + r"\b", route.stdout):
             return False
         with socket.create_connection((address, config["home_archive_port"]), timeout=2):
             return True

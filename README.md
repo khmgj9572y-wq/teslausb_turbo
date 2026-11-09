@@ -29,6 +29,8 @@ checks, follow [INSTALL_BUNDLE.md](INSTALL_BUNDLE.md) one feature at a time.
 | `heartbeat.py` | POST status to the intake host every five minutes and apply validated video on/off/keep replies. |
 | `player.sh` | Start Sunshine's `Desktop` stream with Moonlight Qt; direct RTSP/mpv is a fallback. |
 | `video_web.py`, `web/moonlight/` | Authenticated manual Start/Stop controls, session status, and remaining time in both web views. |
+| `radio_policy.py`, `radio_services.py` | Permanent-MAC radio roles and a local car hotspot with DHCP leases under `/run`. |
+| `airplay_receiver.py`, `display_owner.py`, `dnssd_scope.c` | Hotspot-only UxPlay discovery and Moonlight screen handoff. |
 | `video_toggle.py` | Optional GPIO button to start or stop the video service without touch. |
 | `preflight.sh` | Read-only OS, USB, HDMI, disk, and power probe. |
 | `wifi_admin.py`, `web/`, `portal_session.sh` | Password-protected Wi-Fi tab for both TeslaUSB views, temporary profiles, and a phone-controlled captive-portal browser. |
@@ -61,7 +63,7 @@ bound to `rndis_host`, even if its name changes across boots. The sample soft
 cap is 40 decimal GB: stage/send metadata and thumbnails only, and stop
 Moonlight. The sample hard cap is 60 decimal GB: heartbeat only over LTE.
 Caps reset on the first UTC month **only after NTP is verified**. The queue
-pauses while the home SMB archive is reachable via `wlan0`.
+pauses while the home SMB archive is reachable through the configured Wi-Fi uplink.
 The sidecar also reads TeslaUSB's existing home-archive ledger and skips files
 already recorded there. This prevents an existing SSD's historical clips
 from being uploaded again over LTE. A queued file later completed by the
@@ -106,6 +108,31 @@ limited to three per hour. A sleeping car may report `not attached` or
 `suspended`; observe this physically before enabling the service by default.
 
 ## Network and video
+
+The split-radio setup assigns the USB MT7921AU to client Wi-Fi and the onboard
+radio to a 5 GHz WPA2 car hotspot. Radio roles are resolved using permanent
+MAC addresses in local `/etc/teslausb-car-radios.json`; neither role relies on
+`wlan0`/`wlan1` numbering. The picker binds new station profiles to the uplink
+MAC. The cutover helper preserves the home/shop profile priorities and sets
+uplink route metric 600, ahead of LTE at 700. It requires an attached, connected,
+internet-tested MT7921AU before modifying profiles.
+
+The hotspot uses a manual address and a separate DHCP server with leases in
+`/run/car-hotspot`, avoiding NetworkManager shared-mode writes to read-only
+root. It supplies a local AirPlay link without advertising a default gateway
+or sharing the Pi's LTE connection. Internet sharing is optional future work.
+
+Packaged UxPlay 1.71.1 runs as the desktop user with V4L2 H.264 decoding and a
+fullscreen Wayland sink. Its DNS-SD registrations are scoped to the hotspot
+interface by a small library; other Avahi publishers retain their policies.
+Receiver ports are also restricted to the hotspot. AirPlay startup is refused
+until the two-radio split and hotspot are active. On mirroring connection,
+Moonlight yields the display; on disconnect it resumes only if previously
+running and still within its original session and policy limits. A manual
+Moonlight Stop cancels resumption. AirPlay has no driving-state lockout.
+Audio starts disabled until the HDMI speaker path is tested.
+On Trixie, swap is configured as RAM-only zram so its backing file cannot
+hold the SD root writable after package installation.
 
 The Wi-Fi picker is served by TeslaUSB's existing authenticated web server.
 It lists current Wi-Fi and LTE status, nearby networks, and saved profiles.

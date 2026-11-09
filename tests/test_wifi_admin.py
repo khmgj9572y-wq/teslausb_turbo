@@ -13,6 +13,11 @@ spec.loader.exec_module(wifi_admin)
 
 
 class WifiAdminTests(unittest.TestCase):
+    def setUp(self):
+        self.uplink = patch.object(wifi_admin.radio_policy, 'require_uplink', return_value='wifi-uplink')
+        self.uplink.start()
+        self.addCleanup(self.uplink.stop)
+
     def test_nmcli_escaped_colon_is_not_a_column_break(self):
         self.assertEqual(wifi_admin.split_terse(r"*:Guest\: Wi-Fi:83:WPA2"),
                          ["*", "Guest: Wi-Fi", "83", "WPA2"])

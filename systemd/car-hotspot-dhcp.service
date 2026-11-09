@@ -1,0 +1,14 @@
+[Unit]
+Description=Car hotspot DHCP with runtime leases
+Requires=car-hotspot.service
+After=car-hotspot.service
+BindsTo=car-hotspot.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/run/car-hotspot/dnsmasq.conf
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
