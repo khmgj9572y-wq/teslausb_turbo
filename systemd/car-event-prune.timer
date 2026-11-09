@@ -1,5 +1,5 @@
 [Unit]
-Description=Prune sent cellular upload copies daily
+Description=Prune sent cellular upload copies every ten minutes
 
 [Timer]
 OnBootSec=10min

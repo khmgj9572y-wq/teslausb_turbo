@@ -38,6 +38,8 @@ def load_policy(path):
         "wg_endpoint_ip": section.get("wg_endpoint_ip", "").strip(),
         "vpn_interface": section.get("vpn_interface", "wg0").strip(),
         "heartbeat_url": section.get("heartbeat_url", "").strip(),
+        "remote_video_on_enabled": section.getboolean(
+            "remote_video_on_enabled", fallback=False),
         "ntp_marker": section.get("ntp_marker", "").strip(),
     }
     if values["soft_cap_bytes"] <= 0 or values["hard_cap_bytes"] <= values["soft_cap_bytes"]:

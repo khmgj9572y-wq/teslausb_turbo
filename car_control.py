@@ -149,6 +149,8 @@ def apply_video_command(config, command):
         systemctl("stop", config["video_service"])
         return "off"
     if command == "on":
+        if not config.get("remote_video_on_enabled", False):
+            return "blocked: remote video on disabled"
         allowed, reason = video_allowed(config)
         if not allowed:
             return "blocked: " + reason

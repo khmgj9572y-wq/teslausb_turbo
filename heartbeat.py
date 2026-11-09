@@ -72,12 +72,17 @@ def payload(policy, guard_config, spool_root, snapshot_root):
         guard_state.get("attempts", []), gadget_guard.boot_id(), gadget_guard.uptime())
     flags = car_policy.current_throttle_flags()
     ready = car_policy.ntp_synced(policy)
+    try:
+        ssd_free = shutil.disk_usage(str(policy["ssd_mountpoint"])).free
+    except OSError:
+        ssd_free = None
     result = {
         "uptime_seconds": round(car_policy.uptime()),
         "active_link": link_type,
         "lte_bytes_this_month": int(meter.get("bytes", 0)),
         "lte_month_utc": meter.get("month") if ready else None,
-        "ssd_free_bytes": shutil.disk_usage(str(policy["ssd_mountpoint"])).free,
+        "ssd_free_bytes": ssd_free,
+        "storage_available": not meter.get("storage_unavailable", False),
         "queue_depth": queue_depth(spool_root),
         "last_snapshot_time": last_snapshot_time(snapshot_root, ready),
         "throttled_flags": None if flags is None else "0x{:x}".format(flags),

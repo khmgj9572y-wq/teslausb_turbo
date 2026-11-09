@@ -91,7 +91,9 @@ the final archive only if absent, and owns staging cleanup.
    the optional GPIO video button and the heartbeat
    timer. Test the 30-minute auto-off, home `off` command, soft data cap, and
    link-drop stop. Before enabling home `on`, the home service must verify
-   Park; the Pi has no verified gear-state signal.
+   Park; the Pi has no verified gear-state signal. Keep
+   `remote_video_on_enabled = false` in the Pi's config until that gate is
+   verified. The heartbeat timer can run with remote `on` disabled.
 5. Enable `car-ble-unblock.service` only if cold-boot rfkill reproduces.
    Generate and pair a fresh BLE key on the new image; verify keep-awake and
    remove the old key in the car. Do not copy either private key to the NAS.

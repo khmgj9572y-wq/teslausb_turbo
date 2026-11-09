@@ -20,6 +20,14 @@ class ControlTests(unittest.TestCase):
         config = {"soft_cap_bytes": 40, "hard_cap_bytes": 60}
         self.assertEqual(car_control.video_allowed(
             config, {"storage_unavailable": True})[1], "queue SSD unavailable")
+
+    def test_remote_video_on_is_disabled_until_park_gate_is_ready(self):
+        with mock.patch.object(car_control, "systemctl") as systemctl:
+            result = car_control.apply_video_command(
+                {"remote_video_on_enabled": False}, "on")
+            self.assertEqual(result, "blocked: remote video on disabled")
+            systemctl.assert_not_called()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

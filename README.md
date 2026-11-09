@@ -31,6 +31,7 @@ checks, follow [INSTALL_BUNDLE.md](INSTALL_BUNDLE.md) one feature at a time.
 | `video_toggle.py` | Optional GPIO button to start or stop the video service without touch. |
 | `preflight.sh` | Read-only OS, USB, HDMI, disk, and power probe. |
 | `wifi_admin.py`, `web/`, `portal_session.sh` | Password-protected Wi-Fi tab for both TeslaUSB views, temporary profiles, and a phone-controlled captive-portal browser. |
+| `tools/ik41_at_safe.c` | Narrow AT reader for USB mode and PDP APN, with explicit MBIM/RNDIS switching commands. |
 | `examples/80-ik41us-rndis.network` | RNDIS-only DHCP profile with LTE route metric 700. |
 | `systemd/` | Event, guard, policy, heartbeat, BLE unblock, and video units. |
 
@@ -119,6 +120,8 @@ uses `PersistentKeepalive=25`. Generate the Pi key pair on the Pi at install;
 only its public key goes to the home server. Keep the Wi-Fi route preferred
 over the RNDIS LTE route. The RNDIS profile matches `usb*` **and** driver
 `rndis_host`, so TeslaUSB's temporary `g_ether` gadget is not managed by it.
+The narrow IK41 AT utility can read the current USB mode and context 1 APN;
+its mode-switch commands should be followed by USB-ID and LTE route checks.
 
 Moonlight is primary. The sample starts at 1280×720, 30 fps, and 4 Mb/s;
 adjust after measuring the HDMI adapter's modes, host encoder, LTE path,
@@ -127,6 +130,12 @@ dashboard stream on an active display/capture session. Moonlight leaves
 audio on the host; the phone SIP channel handles AI voice. The video service
 is off until started by command or the optional GPIO button. Use the car
 video input only while parked.
+
+The player checks the tunnel's underlay when a stream starts. The sample uses
+4 Mb/s on Wi-Fi and 1.5 Mb/s with 1,024-byte packets on LTE. A stream already
+running when the underlay changes keeps its current settings until it
+reconnects. The display unit targets the active Wayland desktop; adjust its
+user ID and display environment for the installed OS.
 
 `max_session_min` defaults to 30. The control timer checks every 30 seconds
 and stops video when the limit, soft LTE cap, current undervoltage, missing
@@ -139,8 +148,9 @@ can request `video: on`, `off`, or `keep`. Repeated `on` replies do not restart
 an expired session; a new command transition or the physical button does.
 The heartbeat runs separately with a ten-second network timeout, so it
 cannot block the upload worker.
-The Pi has no verified gear-state input; the home service must send `video:on`
-only when the car is in Park. This remains a commissioning gate.
+The Pi has no verified gear-state input. `remote_video_on_enabled` defaults to
+false, so heartbeat replies can turn video off but cannot start it. Enable
+remote `video:on` only after the home service has a verified Park signal.
 
 ## Installation gates
 
