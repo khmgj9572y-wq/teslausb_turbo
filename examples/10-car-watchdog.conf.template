@@ -1,0 +1,4 @@
+# Install under /etc/systemd/system.conf.d only after /dev/watchdog0 exists.
+[Manager]
+RuntimeWatchdogSec=20s
+RebootWatchdogSec=10min

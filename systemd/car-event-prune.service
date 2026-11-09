@@ -1,0 +1,7 @@
+[Unit]
+Description=Remove local copies of successfully sent clips after retention
+RequiresMountsFor=/backingfiles
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/event_queue.py prune

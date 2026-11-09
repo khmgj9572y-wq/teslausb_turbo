@@ -1,0 +1,8 @@
+[Unit]
+Description=Stage TeslaUSB snapshot clips into the cellular upload queue
+RequiresMountsFor=/backingfiles /mutable
+After=teslausb.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/event_queue.py scan

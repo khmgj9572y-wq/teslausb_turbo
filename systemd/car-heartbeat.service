@@ -1,0 +1,9 @@
+[Unit]
+Description=Send TeslaUSB car status heartbeat over WireGuard
+RequiresMountsFor=/backingfiles /mutable
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/heartbeat.py
+TimeoutStartSec=15s

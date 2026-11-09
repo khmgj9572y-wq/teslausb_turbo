@@ -1,0 +1,2 @@
+# Install under /etc/modules-load.d only if bcm2835_wdt is not built in.
+bcm2835_wdt

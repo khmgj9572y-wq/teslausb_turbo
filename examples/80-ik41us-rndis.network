@@ -1,0 +1,16 @@
+# For a Pi whose LTE stick binds to rndis_host. The interface name can vary
+# between boots. Match usb0 or usb1,
+# but only when the bound driver is rndis_host. TeslaUSB's temporary g_ether
+# gadget uses a different driver and is left to TeslaUSB.
+[Match]
+Name=usb*
+Driver=rndis_host
+
+[Network]
+DHCP=ipv4
+LinkLocalAddressing=no
+
+[DHCP]
+RouteMetric=700
+UseDNS=no
+ClientIdentifier=mac

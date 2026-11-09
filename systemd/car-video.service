@@ -1,0 +1,24 @@
+[Unit]
+Description=Moonlight home video on the EVOffer HDMI input
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=REPLACE_WITH_OS_USER
+WorkingDirectory=/mutable/car-link/moonlight
+Environment=HOME=/mutable/car-link/moonlight
+Environment=XDG_CONFIG_HOME=/mutable/car-link/moonlight/config
+Environment=XDG_CACHE_HOME=/mutable/car-link/moonlight/cache
+Environment=XDG_DATA_HOME=/mutable/car-link/moonlight/data
+Environment=QT_QPA_PLATFORM=eglfs
+TTYPath=/dev/tty2
+StandardInput=tty
+TTYReset=yes
+ExecStartPre=+/usr/local/lib/teslausb-car-link/car_control.py can-video
+ExecStart=/usr/local/lib/teslausb-car-link/player.sh
+ExecStartPost=+/usr/local/lib/teslausb-car-link/car_control.py mark-video-start
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

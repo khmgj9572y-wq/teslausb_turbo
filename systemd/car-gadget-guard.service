@@ -1,0 +1,13 @@
+[Unit]
+Description=Recover TeslaUSB gadget enumeration after an unintended disconnect
+BindsTo=teslausb.service
+After=teslausb.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/teslausb-car-link/gadget_guard.py run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

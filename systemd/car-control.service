@@ -1,0 +1,7 @@
+[Unit]
+Description=Enforce car video, power, and LTE policy
+RequiresMountsFor=/backingfiles /mutable
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/car_control.py tick

@@ -1,0 +1,11 @@
+[Unit]
+Description=Send car heartbeat every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=10s
+Unit=car-heartbeat.service
+
+[Install]
+WantedBy=timers.target

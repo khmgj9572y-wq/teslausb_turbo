@@ -1,0 +1,8 @@
+[Unit]
+Description=Upload staged TeslaUSB clips over WireGuard
+RequiresMountsFor=/backingfiles
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/event_queue.py send

@@ -1,0 +1,11 @@
+[Unit]
+Description=Physical GPIO control for the car video player
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/teslausb-car-link/video_toggle.py --gpio-pin 27
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

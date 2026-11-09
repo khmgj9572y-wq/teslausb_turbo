@@ -1,0 +1,10 @@
+# Home server template for a camera/NVR with RTSP. Replace the source URL.
+# Bind the reader port only to the home WireGuard address.
+rtsp: true
+rtspAddress: REPLACE_WITH_HOME_WG_IP:8554
+rtspTransports: [tcp]
+
+paths:
+  house:
+    source: rtsp://REPLACE_WITH_CAMERA_LAN_IP:554/replace-with-camera-path
+    sourceOnDemand: true

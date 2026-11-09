@@ -1,0 +1,76 @@
+# Install the car-link bundle on a tested new image
+
+This procedure starts **after** [IMAGE_PLAN.md](IMAGE_PLAN.md): a new 64-bit
+Trixie SD card and spare SSD have passed TeslaUSB recording, Sentry, home
+archive, and post-archive USB reconnect tests. Keep the original SD and SSD
+untouched until their reuse path is proven. All connection values in this
+repository are placeholders; fill the real values locally under `/etc`.
+
+## Stage files without enabling services
+
+The following assumes this repository was copied to `/tmp/teslausb-car-link`
+on the new Pi. The TeslaUSB root is normally read-only, so remount it for
+installation, then reboot after the first validation to restore read-only.
+
+```sh
+sudo /root/bin/remountfs_rw
+sudo install -d -m 755 /usr/local/lib/teslausb-car-link
+sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /usr/local/lib/teslausb-car-link/
+sudo install -m 644 /tmp/teslausb-car-link/systemd/* /etc/systemd/system/
+sudo install -m 600 /tmp/teslausb-car-link/examples/teslausb-car-link.ini /etc/teslausb-car-link.ini
+sudo install -m 600 /tmp/teslausb-car-link/examples/car-video.env /etc/teslausb-car-video.env
+sudo systemctl daemon-reload
+```
+
+Edit `/etc/teslausb-car-link.ini` and `/etc/teslausb-car-video.env`: replace
+every `REPLACE_...` value. Set the `User=` placeholder in
+`/etc/systemd/system/car-video.service` to the actual non-root account used
+for Moonlight pairing. Create `/mutable/car-link/moonlight` and make that
+account its owner. Pair Moonlight with `HOME`, `XDG_CONFIG_HOME`,
+`XDG_CACHE_HOME`, and `XDG_DATA_HOME` set to the same `/mutable` paths in the
+unit; its pairing state must not be written to the read-only root. Run
+`systemctl daemon-reload` after changing the unit. No real IP, hostname,
+key, VIN, or password belongs in this repository.
+
+Create a **new** WireGuard key pair on the Pi and a separate SSH key for its
+restricted intake account. Keep private keys mode 0600 on the Pi and send
+only the public keys home. The home intake key's forced command should be
+`rrsync -wo` rooted at a staging directory. Use `ssh_path = .` in the local
+config for that restricted root. Confirm the server's SSH host key out of
+band; `event_queue.py` requires strict host-key checking. The home host must
+accept the sender's `-rtR --ignore-existing --partial-dir=.partial` transfer;
+do one harmless file first. Home then hard-links each completed file into
+the final archive only if absent, and owns staging cleanup.
+
+## Enable one feature at a time
+
+1. With the vehicle parked, run `gadget_guard.py once` only after confirming
+   TeslaUSB's gadget is meant to be connected. Observe one home archive cycle
+   and inspect `/mutable/gadget-guard.log`. Observe UDC state with the car
+   asleep before enabling the service continuously.
+2. Install the RNDIS network profile for the modem and verify Wi-Fi has the
+   better route metric, DHCP lease state is under `/run`, and DNS resolves
+   over both links. Establish the dedicated WireGuard peer; check that only
+   the intake and Sunshine hosts route through it.
+3. Test `car_control.py tick` and verify LTE byte accounting and power flags.
+   Enable `car-control.timer` before automatic uploads so an in-progress
+   transfer can be stopped on undervoltage. Test `event_queue.py scan`,
+   `status`, and one `send` into the restricted intake. Verify the home CIFS
+   archive later skips an LTE-first file whose size and mtime match. Then
+   enable the scan, send, and prune timers.
+4. Install Moonlight Qt from its inspected official package-repository
+   script. Pair as the non-root OS user on a console, test 720p/30 fps and
+   the HDMI mode, then start `car-video.service` manually. Only then enable
+   the optional GPIO video button and the heartbeat
+   timer. Test the 30-minute auto-off, home `off` command, soft data cap, and
+   link-drop stop. Before enabling home `on`, the home service must verify
+   Park; the Pi has no verified gear-state signal.
+5. Enable `car-ble-unblock.service` only if cold-boot rfkill reproduces.
+   Generate and pair a fresh BLE key on the new image; verify keep-awake and
+   remove the old key in the car. Do not copy either private key to the NAS.
+6. Check `/dev/watchdog0` and the driver, then install the watchdog manager
+   template and verify a safe reboot test on spare media.
+
+The services and timers are intentionally disabled in this repository. Keep
+the actual endpoints and keys in `/etc` on the Pi, while counters/logs live
+under `/run`, `/mutable`, or `/backingfiles`.

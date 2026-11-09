@@ -1,0 +1,12 @@
+[Unit]
+Description=Unblock Bluetooth before TeslaUSB BLE keep-awake
+Wants=bluetooth.service
+After=bluetooth.service
+Before=teslausb.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/rfkill unblock bluetooth
+
+[Install]
+WantedBy=teslausb.service

@@ -1,0 +1,11 @@
+# Pi-side WireGuard example. Replace placeholders before use.
+# Dedicated tunnel. Replace every placeholder at install time.
+[Interface]
+Address = <CAR_WG_IP>/32
+PrivateKey = <PI_PRIVATE_KEY>
+
+[Peer]
+PublicKey = <HOME_PUBLIC_KEY>
+Endpoint = <HOME_PUBLIC_HOSTNAME_OR_IP>:51820
+AllowedIPs = <INTAKE_WG_IP>/32, <SUNSHINE_WG_IP>/32
+PersistentKeepalive = 25

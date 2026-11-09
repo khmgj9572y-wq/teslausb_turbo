@@ -1,0 +1,11 @@
+[Unit]
+Description=Prune sent cellular upload copies daily
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=car-event-prune.service
+
+[Install]
+WantedBy=timers.target
