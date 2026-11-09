@@ -6,7 +6,12 @@ Before=teslausb.service
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
+RuntimeDirectory=teslausb-ble
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/local/lib/teslausb-car-link/ble_prepare.py
 ExecStart=/usr/sbin/rfkill unblock bluetooth
+ExecStart=/usr/bin/bluetoothctl --timeout 10 power on
 
 [Install]
 WantedBy=teslausb.service
