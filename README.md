@@ -62,6 +62,10 @@ cap is 40 decimal GB: stage/send metadata and thumbnails only, and stop
 Moonlight. The sample hard cap is 60 decimal GB: heartbeat only over LTE.
 Caps reset on the first UTC month **only after NTP is verified**. The queue
 pauses while the home SMB archive is reachable via `wlan0`.
+The sidecar also reads TeslaUSB's existing home-archive ledger and skips files
+already recorded there. This prevents an existing SSD's historical clips
+from being uploaded again over LTE. A queued file later completed by the
+home archive is treated as delivered; only its sidecar copy is pruned.
 
 The intake SSH key is expected to run `rrsync -wo -no-del` and accept rsync only into
 a **staging root**, separate from the final `footage/` archive. The Pi sends

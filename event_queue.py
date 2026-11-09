@@ -82,6 +82,7 @@ def load_config(path):
         raise ValueError("invalid vpn_interface")
     values = {
         "archive_root": archive_root,
+        "archive_index": Path(section.get("archive_index", "/mutable/sentry_files_archived")),
         "snapshot_root": snapshot_root,
         "snapshot_mount_root": snapshot_mount_root,
         "spool_root": spool_root,
@@ -252,6 +253,25 @@ def valid_sidecar(source, name):
     return True
 
 
+def archived_paths(config):
+    """Read TeslaUSB's home-delivery ledger without changing its state."""
+    path = config.get("archive_index")
+    if path is None:
+        return set()
+    try:
+        lines = Path(path).read_text(errors="replace").splitlines()
+    except FileNotFoundError:
+        return set()
+    paths = set()
+    for line in lines:
+        line = line[2:] if line.startswith("./") else line
+        parts = Path(line).parts
+        if (len(parts) == 3 and parts[0] in CLIP_DIRS and
+                all(safe_name(part) for part in parts)):
+            paths.add(str(Path(*parts)))
+    return paths
+
+
 def scan(config, db, policy=None):
     scan_mode = "normal"
     min_file_age = config["min_file_age"]
@@ -274,6 +294,7 @@ def scan(config, db, policy=None):
     staged = 0
     skipped = 0
     now = time.time()
+    home_archived = archived_paths(config)
     spool_bytes = db.execute("SELECT COALESCE(SUM(size), 0) FROM files").fetchone()[0]
     for clip_type in CLIP_DIRS:
         clip_root = root / clip_type
@@ -289,6 +310,8 @@ def scan(config, db, policy=None):
                 if scan_mode == "soft" and priority(candidate.name) > 1:
                     continue
                 relative = Path(clip_type) / event.name / candidate.name
+                if str(relative) in home_archived:
+                    continue
                 try:
                     source = candidate.resolve(strict=True)
                     if not (under_root(source, config["snapshot_root"]) or
@@ -384,9 +407,19 @@ def send(config, db, policy=None):
     bandwidth = (config["active_bandwidth_kib"] if
                  video.returncode == 0 else config["bandwidth_kib"])
     sent = 0
+    home_archived = archived_paths(config)
     rows = db.execute("""SELECT path, sha256, priority FROM files WHERE status='pending'
         ORDER BY priority, path DESC LIMIT ?""", (config["max_files"],)).fetchall()
     for relative_string, digest, file_priority in rows:
+        if relative_string in home_archived:
+            # CIFS may deliver a pending file while the LTE worker is paused.
+            # Retain its delivery record and let the normal local prune remove
+            # only the sidecar's queued copy.
+            trusted_time = policy is None or car_policy.ntp_synced(policy)
+            db.execute("UPDATE files SET status='sent', sent_at=? WHERE path=? AND sha256=?",
+                       (int(time.time()) if trusted_time else 0, relative_string, digest))
+            db.commit()
+            continue
         if policy is not None:
             meter = car_policy.update_meter(policy)
             mode = car_policy.cap_mode(policy, meter)

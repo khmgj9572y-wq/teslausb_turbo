@@ -79,6 +79,27 @@ class QueueTests(unittest.TestCase):
         self.assertEqual((staged, skipped), (0, 1))
         self.assertFalse((self.spool / "SentryClips" / link.parent.name / link.name).exists())
 
+    def test_previously_home_archived_history_is_not_staged(self):
+        self.add_link("SavedClips", "2026-11-08_12-00-00", "event.json", b"{}")
+        ledger = Path(self.temp.name) / "home-archived"
+        ledger.write_text("SavedClips/2026-11-08_12-00-00/event.json\n")
+        self.config["archive_index"] = ledger
+        self.assertEqual(event_queue.scan(self.config, self.db), (0, 0))
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM files").fetchone()[0], 0)
+        self.assertTrue((self.archive / "SavedClips/2026-11-08_12-00-00/event.json").is_symlink())
+
+    def test_home_archive_can_complete_pending_lte_delivery(self):
+        self.add_link("SavedClips", "2026-11-08_12-00-00", "event.json", b"{}")
+        event_queue.scan(self.config, self.db)
+        ledger = Path(self.temp.name) / "home-archived"
+        ledger.write_text("./SavedClips/2026-11-08_12-00-00/event.json\n")
+        self.config["archive_index"] = ledger
+        with mock.patch.object(event_queue, "vpn_route_ok", return_value=True), \
+             mock.patch.object(event_queue.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
+            self.assertEqual(event_queue.send(self.config, self.db), 0)
+        self.assertFalse(any(call.args[0][0] == "rsync" for call in run.call_args_list))
+        self.assertEqual(self.db.execute("SELECT status FROM files").fetchone()[0], "sent")
+
     def test_changed_snapshot_file_is_queued_again(self):
         source, _ = self.add_link("SavedClips", "2026-11-08_12-00-00",
                                   "2026-11-08_12-00-00-front.mp4", b"clip1")
