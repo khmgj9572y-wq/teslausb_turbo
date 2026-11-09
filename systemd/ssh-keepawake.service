@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep the Tesla awake while an SSH session on the car Pi is in use
+After=bluetooth.service car-ble-unblock.service
+Wants=car-ble-unblock.service
+
+[Service]
+ExecStart=/usr/local/sbin/ssh-keepawake
+Restart=always
+RestartSec=30
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
