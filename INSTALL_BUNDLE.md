@@ -32,11 +32,14 @@ unit; its pairing state must not be written to the read-only root. Run
 `systemctl daemon-reload` after changing the unit. No real IP, hostname,
 key, VIN, or password belongs in this repository.
 
-Create a **new** WireGuard key pair on the Pi and a separate SSH key for its
-restricted intake account. Keep private keys mode 0600 on the Pi and send
-only the public keys home. The home intake key's forced command should be
-`rrsync -wo` rooted at a staging directory. Use `ssh_path = .` in the local
-config for that restricted root. Confirm the server's SSH host key out of
+Generate a dedicated WireGuard key pair on the Pi and a separate SSH key for
+its restricted intake account. Check that the WireGuard private key is nonempty
+and valid before deriving its public key. A failed `wg genkey > file` command
+can leave an empty file behind; replace only that empty file with a new key,
+and preserve a nonempty invalid file for inspection. Keep private keys mode
+0600 on the Pi and send only the public keys home. The home intake key's
+forced command should be `rrsync -wo -no-del` rooted at a staging directory.
+Use `ssh_path = .` in the local config for that restricted root. Confirm the server's SSH host key out of
 band; `event_queue.py` requires strict host-key checking. The home host must
 accept the sender's `-rtR --ignore-existing --partial-dir=.partial` transfer;
 do one harmless file first. Home then hard-links each completed file into

@@ -40,9 +40,15 @@ shorter intervals require physical recording validation.
 
 ## LTE upload behavior
 
-`event_queue.py scan` stages `SavedClips` and `SentryClips` only. The newest
-event's `event.json`/`events.json` and `thumb.png` go before front camera and
-other MP4s. The sample queue stops at 5 GiB or 45 GiB free space, whichever
+`event_queue.py scan` stages `SavedClips` and `SentryClips` only. For each event,
+the validated `thumb.png` goes first, then a complete `event.json` or
+`events.json`, then the front camera and other MP4s. JSON must parse as an
+object; a thumbnail must have the PNG signature and final IEND chunk. MP4s
+must have the same size and mtime in two consecutive distinct TeslaUSB
+snapshots. At the default snapshot cadence of about 3,480 seconds, this can
+delay an MP4 by nearly an hour. Measure and safely shorten that cadence on
+the spare image before promising video delivery within a few minutes. The
+sample queue stops at 5 GiB or 45 GiB free space, whichever
 comes first; 256 MiB within the queue is reserved for event JSON and
 thumbnails. Sent local copies are pruned on a 10-minute cycle. Tune only
 after checking actual SSD reserve and LTE use.
@@ -54,7 +60,7 @@ Moonlight. The sample hard cap is 60 decimal GB: heartbeat only over LTE.
 Caps reset on the first UTC month **only after NTP is verified**. The queue
 pauses while the home SMB archive is reachable via `wlan0`.
 
-The intake SSH key is expected to run `rrsync -wo` and accept rsync only into
+The intake SSH key is expected to run `rrsync -wo -no-del` and accept rsync only into
 a **staging root**, separate from the final `footage/` archive. The Pi sends
 relative `SavedClips/<event>/<file>` and `SentryClips/<event>/<file>` paths;
 it does not run a remote shell command. It preserves file mtimes, uses
@@ -65,9 +71,10 @@ staging root before the Pi connects. See
 `rrsync -no-overwrite` is not part of this design: upstream rrsync refuses
 `--partial-dir` when that option is enabled.
 
-The home intake publishes each completed staging file into `footage/` with
-an atomic hard link that succeeds only when the final name is absent. On
-`EEXIST`, it skips or compares and never overwrites the SMB archive. Home
+The home intake claims a completed staging file by rename, then publishes it
+into `footage/` with an atomic no-clobber hard link. On `EEXIST`, matching
+size and mtime is a duplicate; a difference is a conflict that the home
+side alerts on. It never overwrites the SMB archive. Home
 owns staging cleanup. The staging and final paths must support same-filesystem
 hard links; this needs an end-to-end intake test. The Pi counts a file as
 delivered when its rsync exits zero and prunes only its local queued copy.

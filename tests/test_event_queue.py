@@ -33,6 +33,7 @@ class QueueTests(unittest.TestCase):
             "require_mountpoint": "",
             "upload_marker": root / "upload-active",
             "min_file_age": 0,
+            "stable_mp4_snapshots": 1,
             "retention_days": 7,
             "max_spool_bytes": 1024 * 1024,
             "min_free_bytes": 0,
@@ -94,20 +95,23 @@ class QueueTests(unittest.TestCase):
         self.add_link("SavedClips", "2026-11-08_12-00-00",
                       "2026-11-08_12-00-00-front.mp4", b"video")
         self.add_link("SavedClips", "2026-11-08_12-00-00", "event.json", b"{}")
+        self.add_link("SavedClips", "2026-11-08_12-00-00", "thumb.png",
+                      event_queue.PNG_START + b"image-data" + event_queue.PNG_END)
         event_queue.scan(self.config, self.db)
         success = mock.Mock(returncode=0, stdout="", stderr="")
         with mock.patch.object(event_queue, "vpn_route_ok", return_value=True), \
              mock.patch.object(event_queue.subprocess, "run", return_value=success) as run:
             sent = event_queue.send(self.config, self.db)
-        self.assertEqual(sent, 2)
+        self.assertEqual(sent, 3)
         transfers = [call.args[0] for call in run.call_args_list if call.args[0][0] == "rsync"]
-        self.assertEqual(transfers[0][-2], "./SavedClips/2026-11-08_12-00-00/event.json")
+        self.assertEqual(transfers[0][-2], "./SavedClips/2026-11-08_12-00-00/thumb.png")
+        self.assertEqual(transfers[1][-2], "./SavedClips/2026-11-08_12-00-00/event.json")
         self.assertIn("--ignore-existing", transfers[0])
         self.assertIn("--partial-dir=.partial", transfers[0])
         self.assertEqual(transfers[0][-1], "teslaintake@192.0.2.10:./")
         self.assertTrue(all(call.args[0][0] != "ssh" for call in run.call_args_list))
         self.assertEqual(self.db.execute(
-            "SELECT COUNT(*) FROM files WHERE status='sent'").fetchone()[0], 2)
+            "SELECT COUNT(*) FROM files WHERE status='sent'").fetchone()[0], 3)
 
     def test_prune_keeps_database_state_for_deduplication(self):
         self.add_link("SentryClips", "2026-11-08_12-00-00", "event.json", b"{}")
@@ -185,6 +189,40 @@ class QueueTests(unittest.TestCase):
         self.assertEqual((staged, skipped), (1, 1))
         self.assertEqual(self.db.execute("SELECT path FROM files").fetchone()[0],
                          "SentryClips/{}/event.json".format(event))
+
+    def test_invalid_event_json_waits_for_later_snapshot(self):
+        self.add_link("SentryClips", "2026-11-08_12-00-00", "event.json", b'{"reason":')
+        staged, skipped = event_queue.scan(self.config, self.db)
+        self.assertEqual((staged, skipped), (0, 1))
+
+    def test_thumbnail_needs_png_signature_and_iend(self):
+        event = "2026-11-08_12-00-00"
+        source, _ = self.add_link("SentryClips", event, "thumb.png", b"\x89PNG\r\n\x1a\ntruncated")
+        self.assertEqual(event_queue.scan(self.config, self.db), (0, 1))
+        source.write_bytes(event_queue.PNG_START + b"content" + event_queue.PNG_END)
+        os.utime(str(source), (time.time() - 60, time.time() - 60))
+        self.assertEqual(event_queue.scan(self.config, self.db)[0], 1)
+
+    def test_mp4_needs_two_consecutive_snapshots_with_same_size_and_mtime(self):
+        self.config["stable_mp4_snapshots"] = 2
+        event = "2026-11-08_12-00-00"
+        name = "2026-11-08_11-59-00-front.mp4"
+        first = self.snapshots / "snap-000001" / "TeslaCam" / "SavedClips" / event / name
+        first.parent.mkdir(parents=True)
+        first.write_bytes(b"finished clip")
+        os.utime(str(first), (1000000000, 1000000000))
+        link = self.archive / "SavedClips" / event / name
+        link.parent.mkdir(parents=True)
+        link.symlink_to(first)
+        self.assertEqual(event_queue.scan(self.config, self.db)[0], 0)
+        self.assertEqual(event_queue.scan(self.config, self.db)[0], 0)
+        second = self.snapshots / "snap-000002" / "TeslaCam" / "SavedClips" / event / name
+        second.parent.mkdir(parents=True)
+        second.write_bytes(b"finished clip")
+        os.utime(str(second), (1000000000, 1000000000))
+        link.unlink()
+        link.symlink_to(second)
+        self.assertEqual(event_queue.scan(self.config, self.db)[0], 1)
 
 
 if __name__ == "__main__":

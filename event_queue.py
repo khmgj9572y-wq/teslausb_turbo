@@ -10,6 +10,7 @@ import configparser
 import fcntl
 import hashlib
 import ipaddress
+import json
 import os
 import re
 import shlex
@@ -28,6 +29,8 @@ import car_policy
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.+-]+$")
 CLIP_DIRS = ("SavedClips", "SentryClips")
 MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # avoid accidentally staging a disk image
+PNG_START = b"\x89PNG\r\n\x1a\n"
+PNG_END = b"\x00\x00\x00\x00IEND\xaeB\x60\x82"
 
 
 def safe_name(name):
@@ -36,9 +39,9 @@ def safe_name(name):
 
 def priority(name):
     lower = name.lower()
-    if lower in ("event.json", "events.json"):
-        return 0
     if lower == "thumb.png":
+        return 0
+    if lower in ("event.json", "events.json"):
         return 1
     if lower.endswith("-front.mp4"):
         return 2
@@ -90,6 +93,7 @@ def load_config(path):
         "ssh_key": ssh_key,
         "vpn_interface": vpn_interface,
         "min_file_age": section.getint("min_file_age_seconds", fallback=30),
+        "stable_mp4_snapshots": section.getint("stable_mp4_snapshots", fallback=2),
         "bandwidth_kib": section.getint("bandwidth_kib_per_second", fallback=750),
         "active_bandwidth_kib": section.getint(
             "active_bandwidth_kib_per_second", fallback=250),
@@ -111,6 +115,8 @@ def load_config(path):
         raise ValueError("metadata_reserve_mib must fit within max_spool_gib")
     if values["min_file_age"] < 0:
         raise ValueError("min_file_age_seconds must be nonnegative")
+    if values["stable_mp4_snapshots"] < 1:
+        raise ValueError("stable_mp4_snapshots must be positive")
     return values
 
 
@@ -136,6 +142,13 @@ def database(config):
         sent_at INTEGER
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS files_pending ON files(status, priority, updated_at)")
+    db.execute("""CREATE TABLE IF NOT EXISTS observations (
+        path TEXT PRIMARY KEY,
+        snapshot_number INTEGER NOT NULL,
+        source_size INTEGER NOT NULL,
+        source_mtime_ns INTEGER NOT NULL,
+        stable_count INTEGER NOT NULL
+    )""")
     db.commit()
     return db
 
@@ -186,6 +199,59 @@ def copy_atomic(source, destination):
             os.unlink(temp_name)
 
 
+def snapshot_number(path):
+    for part in Path(path).parts:
+        match = re.fullmatch(r"snap-(\d+)", part)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def mp4_stable_in_snapshots(db, relative, source, stat, required):
+    if required == 1:
+        return True
+    number = snapshot_number(source)
+    if number is None:
+        return False
+    row = db.execute("""SELECT snapshot_number, source_size,
+        source_mtime_ns, stable_count FROM observations WHERE path=?""",
+        (str(relative),)).fetchone()
+    if row and number == row[0]:
+        return row[3] >= required
+    if (row and number == row[0] + 1 and
+            (stat.st_size, stat.st_mtime_ns) == (row[1], row[2])):
+        count = min(required, row[3] + 1)
+    else:
+        count = 1
+    db.execute("""INSERT OR REPLACE INTO observations
+        (path, snapshot_number, source_size, source_mtime_ns, stable_count)
+        VALUES (?, ?, ?, ?, ?)""",
+        (str(relative), number, stat.st_size, stat.st_mtime_ns, count))
+    db.commit()
+    return count >= required
+
+
+def valid_sidecar(source, name):
+    lower = name.lower()
+    if lower in ("event.json", "events.json"):
+        try:
+            with open(str(source), "rb") as handle:
+                data = handle.read(1024 * 1024 + 1)
+            return len(data) <= 1024 * 1024 and isinstance(json.loads(data), dict)
+        except (OSError, ValueError, UnicodeError):
+            return False
+    if lower == "thumb.png":
+        try:
+            with open(str(source), "rb") as handle:
+                first = handle.read(8)
+                handle.seek(-12, os.SEEK_END)
+                last = handle.read(12)
+            return first == PNG_START and last == PNG_END
+        except OSError:
+            return False
+    return True
+
+
 def scan(config, db, policy=None):
     scan_mode = "normal"
     min_file_age = config["min_file_age"]
@@ -232,6 +298,12 @@ def scan(config, db, policy=None):
                     stat = source.stat()
                     if not source.is_file() or stat.st_size > MAX_FILE_SIZE:
                         skipped += 1
+                        continue
+                    if not valid_sidecar(source, candidate.name):
+                        skipped += 1
+                        continue
+                    if candidate.name.lower().endswith(".mp4") and not mp4_stable_in_snapshots(
+                            db, relative, source, stat, config["stable_mp4_snapshots"]):
                         continue
                     # FAT timestamps can appear in the future if car/Pi clocks or
                     # time zones differ. Do not postpone those files forever.
