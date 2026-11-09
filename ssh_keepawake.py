@@ -78,8 +78,16 @@ def teslausb_keepawake_running():
         return False
 
 
+def wrapper_missing():
+    """True if /root/bin/tesla-control is the bare binary (hci0 lock wrapper lost, e.g. after a TeslaUSB reinstall)."""
+    try:
+        with open(TESLA, 'rb') as f: return f.read(4) == b'\x7fELF'
+    except OSError:
+        return False
+
+
 def nudge(v):
-    r = subprocess.run([TESLA, '-ble', '-key-file', KEY, '-vin', v, 'charge-port-close'], capture_output=True, text=True, timeout=90)
+    r = subprocess.run([TESLA, '-ble', '-key-file', KEY, '-vin', v, 'charge-port-close'], capture_output=True, text=True, timeout=300)  # includes up to 120 s hci0 lock wait
     text = (r.stdout + r.stderr).strip()
     if r.returncode == 0 or 'already closed' in text or 'cable connected' in text:
         return True, ('ok' if r.returncode == 0 else ('already closed' if 'already closed' in text else 'cable connected'))
@@ -94,6 +102,8 @@ def main():
     cpu_hist = {}   # session id -> list of (mono, cpu_s)
     last_nudge = None; was_awake = False; v = vin()
     log('start: idle %ds, nudge every %ds, min age %ds%s, VIN %s' % (IDLE, NUDGE, MIN_AGE, ' (DRY)' if dry else '', 'set' if v else 'MISSING'))
+    if wrapper_missing():
+        log('WARNING: %s is the bare binary: hci0 lock wrapper missing (re-run tools/install_hci0_lock.sh)' % TESLA)
     while True:
         now = mono(); in_use = []; idle = []
         live = sessions(); ids = {s['Id'] for s in live}

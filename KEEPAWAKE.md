@@ -19,5 +19,32 @@ sleep as usual.
   commit the VIN).
 - `sudo ssh-keepawake --status` prints the last decision;
   `journalctl -u ssh-keepawake` shows session/nudge changes.
-- `tesla-control` takes the Bluetooth adapter exclusively (HCI user channel)
-  for each command, so BlueZ-based BLE users lose the adapter for that moment.
+
+## Sharing the Bluetooth adapter (hci0)
+
+`tesla-control` (go-ble) opens the HCI **user channel**: for each command it
+takes hci0 away from BlueZ (`/org/bluez/hci0` disappears for about a second,
+longer on retries). A BlueZ user that is mid-exchange at that moment (bleak,
+`bluetoothctl`) loses its adapter and connection.
+
+`tools/install_hci0_lock.sh` puts a small wrapper in front of
+`/root/bin/tesla-control` (the binary moves to `tesla-control.real`). Every
+caller (TeslaUSB keep-awake, the web UI's pairing/status buttons,
+ssh-keepawake) then waits for `/run/lock/hci0.lock` (root:bluetooth 0660,
+created by tmpfiles) for up to 120 s (`TESLA_CONTROL_LOCK_WAIT`), and holds it
+until the command exits. BlueZ scripts take the same lock around their BLE
+exchange:
+
+```python
+import fcntl
+lock = open('/run/lock/hci0.lock', 'a')
+fcntl.flock(lock, fcntl.LOCK_EX)   # blocks while tesla-control runs
+...                                 # BLE work through BlueZ
+lock.close()
+```
+
+Keep that hold short (seconds): keep-awake nudges wait behind it. A TeslaUSB
+setup run that reinstalls `tesla-control` removes the wrapper; ssh-keepawake
+logs a warning at start, and re-running the installer restores it
+(`--remove` undoes it). For full isolation, give the BlueZ user its own USB
+Bluetooth adapter (hci1) and leave hci0 to `tesla-control`.

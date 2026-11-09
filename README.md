@@ -38,6 +38,7 @@ checks, follow [INSTALL_BUNDLE.md](INSTALL_BUNDLE.md) one feature at a time.
 | `examples/80-ik41us-rndis.network` | RNDIS-only DHCP profile with LTE route metric 700. |
 | `systemd/` | Event, guard, policy, heartbeat, BLE unblock, and video units. |
 | `ssh_keepawake.py` | Keep the car awake over BLE while an SSH session is in use; idle sessions stop counting. See [KEEPAWAKE.md](KEEPAWAKE.md). |
+| `tools/install_hci0_lock.sh` | Lock wrapper so `tesla-control` and BlueZ BLE users take turns on hci0. See [KEEPAWAKE.md](KEEPAWAKE.md). |
 
 The uploader intentionally reads TeslaUSB's snapshot links and does not
 modify its camera image or archive state. TeslaUSB's normal home Wi-Fi archive
