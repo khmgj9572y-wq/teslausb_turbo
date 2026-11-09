@@ -29,6 +29,8 @@ every fetched file resolves to this commit during spare-media testing.
 
 1. Image a **new** SD card with Raspberry Pi OS Lite 64-bit Trixie. Record
    the image version and checksum. Keep the old SD card physically separate.
+   A fresh OS may have no entries in `/sys/class/udc`; the pinned TeslaUSB
+   setup adds `dtoverlay=dwc2` and reboots to expose the USB device controller.
 2. Connect a spare SSD. Prepare and inspect the pinned generic installer;
    invoke it with `norootshrink` only after confirming the selected disk is
    the spare. In TeslaUSB's setup variables set `DATA_DRIVE` to the **whole
