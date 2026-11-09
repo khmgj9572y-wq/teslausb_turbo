@@ -12,7 +12,8 @@ This is a pre-install bundle. The code has local tests; physical recording,
 sleeping-car UDC behavior, power under load, and the new image still need
 validation. The planned base is Raspberry Pi OS Lite **64-bit Trixie** on a
 new SD card; Bookworm 64-bit is a fallback. Preserve the working SD card as
-rollback. TeslaUSB's external-drive setup can erase an SSD. Follow
+rollback. TeslaUSB's external-drive setup can erase an SSD and needs
+`DATA_DRIVE` set to the whole spare disk (at least 64 GB). Follow
 [IMAGE_PLAN.md](IMAGE_PLAN.md) and use spare media before connecting an
 existing archive drive to a fresh setup run. When the new image passes those
 checks, follow [INSTALL_BUNDLE.md](INSTALL_BUNDLE.md) one feature at a time.

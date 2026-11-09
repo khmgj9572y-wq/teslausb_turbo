@@ -2,7 +2,8 @@
 
 Target: stock Raspberry Pi OS Lite **64-bit Trixie**, TeslaUSB generic
 installer with `norootshrink`, and Moonlight Qt. The working SD card stays
-untouched as rollback. Use a **spare SSD** during first setup: TeslaUSB's
+untouched as rollback. Use a **spare SSD of at least 64 GB** during first
+setup: TeslaUSB's
 external-drive setup can repartition/erase a selected USB drive. Do not
 connect the existing car archive SSD to a fresh setup run until a tested
 non-destructive reuse procedure exists.
@@ -30,7 +31,11 @@ every fetched file resolves to this commit during spare-media testing.
    the image version and checksum. Keep the old SD card physically separate.
 2. Connect a spare SSD. Prepare and inspect the pinned generic installer;
    invoke it with `norootshrink` only after confirming the selected disk is
-   the spare. Confirm the actual TeslaUSB source commit after installation.
+   the spare. In TeslaUSB's setup variables set `DATA_DRIVE` to the **whole
+   spare disk**, not a partition, before running `/etc/rc.local`. At the pinned
+   commit, `DATA_DRIVE` selects `/mutable` and `/backingfiles`; leaving it
+   unset selects the SD card. `norootshrink` does not select the data disk.
+   Confirm the actual TeslaUSB source commit after installation.
 3. Prove the USB gadget, manual/honk saves, Sentry recording, home Wi-Fi SMB
    archive, music sync, and post-archive re-enumeration on spare media.
 4. Validate the gadget guard and then RNDIS LTE, Wi-Fi/LTE routes, DNS,
