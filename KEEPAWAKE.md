@@ -48,3 +48,15 @@ setup run that reinstalls `tesla-control` removes the wrapper; ssh-keepawake
 logs a warning at start, and re-running the installer restores it
 (`--remove` undoes it). For full isolation, give the BlueZ user its own USB
 Bluetooth adapter (hci1) and leave hci0 to `tesla-control`.
+
+After an upstream reinstall, the lock installer preserves the older `.real`
+binary in a root-only local backup directory and wraps the newly installed
+binary. It fails if root cannot be returned to read-only.
+
+Install `ble_adapter_check.py` alongside `ble_prepare.py` in the sidecar
+library directory when updating `car-ble-unblock.service`. The boot check
+logs controller numbers and UART/USB transport only, without MAC addresses.
+If UART is no longer hci0, it warns and prevents the power-on step from
+targeting a different controller. The power-on step selects the hci0 BlueZ
+object explicitly and takes the same shared lock as the command wrapper.
+

@@ -160,12 +160,11 @@ def apply_video_command(config, command):
     if command == "on":
         if not config.get("remote_video_on_enabled", False):
             return "blocked: remote video on disabled"
-        allowed, reason = video_allowed(config)
+        allowed, reason = display_owner.start_video(config)
         if not allowed:
+            if reason == 'start failed':
+                return reason
             return "blocked: " + reason
-        if not video_active(config):
-            if not systemctl("start", config["video_service"]):
-                return "start failed"
         return "on"
     return "keep"
 

@@ -421,6 +421,11 @@ def send(config, db, policy=None):
             db.commit()
             continue
         if policy is not None:
+            # A send batch can span a network change. Yield to the normal
+            # archive before starting another file after home Wi-Fi returns.
+            if car_policy.home_wifi_reachable(policy):
+                print("home Wi-Fi archive returned; LTE queue paused")
+                break
             meter = car_policy.update_meter(policy)
             mode = car_policy.cap_mode(policy, meter)
             if mode == "hard":

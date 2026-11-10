@@ -31,13 +31,9 @@ def act(policy, action, request):
         raise ValueError("Unknown video action")
     if request.get("parked") is not True:
         raise ValueError("Confirm that the car is parked before starting")
-    allowed, reason = car_control.video_allowed(policy)
+    allowed, reason = display_owner.start_video(policy)
     if not allowed:
         raise RuntimeError("Moonlight cannot start: " + reason)
-    # Starting an already active session must not reset its time limit.
-    if not car_control.video_active(policy):
-        if not car_control.systemctl("start", policy["video_service"]):
-            raise RuntimeError("Moonlight could not start; check the video service")
     return status(policy)
 
 

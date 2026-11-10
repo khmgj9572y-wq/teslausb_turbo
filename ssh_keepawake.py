@@ -86,6 +86,22 @@ def wrapper_missing():
         return False
 
 
+def session_activity(props, history, now):
+    age = now - int(props.get('TimestampMonotonic', '0') or 0) / 1e6
+    cpu = cpu_seconds(props)
+    if cpu is not None:
+        history.append((now, cpu))
+    while history and now - history[0][0] > IDLE:
+        history.pop(0)
+    busy = len(history) >= 2 and history[-1][1] - history[0][1] >= CPU_BUSY
+    terminal_age = tty_age(props)
+    typed = terminal_age is not None and 0 <= terminal_age < IDLE
+    fresh = 0 <= age < IDLE
+    if age < MIN_AGE:
+        return []
+    return [reason for reason, active in (('tty', typed), ('cpu', busy), ('new', fresh)) if active]
+
+
 def nudge(v):
     r = subprocess.run([TESLA, '-ble', '-key-file', KEY, '-vin', v, 'charge-port-close'], capture_output=True, text=True, timeout=300)  # includes up to 120 s hci0 lock wait
     text = (r.stdout + r.stderr).strip()
@@ -110,18 +126,9 @@ def main():
         for sid in list(cpu_hist):
             if sid not in ids: del cpu_hist[sid]
         for s in live:
-            age = now - int(s.get('TimestampMonotonic', '0') or 0) / 1e6
-            c = cpu_seconds(s); h = cpu_hist.setdefault(s['Id'], [])
-            if c is not None: h.append((now, c))
-            while h and now - h[0][0] > IDLE: h.pop(0)
-            busy = len(h) >= 2 and h[-1][1] - h[0][1] >= CPU_BUSY
-            t = tty_age(s); typed = t is not None and t < IDLE
-            fresh = age < IDLE
+            reasons = session_activity(s, cpu_hist.setdefault(s['Id'], []), now)
             label = '%s#%s' % (s.get('Name', '?'), s['Id'])
-            if age < MIN_AGE:
-                continue
-            (in_use if (typed or busy or fresh) else idle).append(
-                label + '(' + ','.join(x for x, y in (('tty', typed), ('cpu', busy), ('new', fresh)) if y) + ')' if (typed or busy or fresh) else label)
+            (in_use if reasons else idle).append(label + '(' + ','.join(reasons) + ')' if reasons else label)
         awake = bool(in_use)
         if awake != was_awake:
             log(('KEEP AWAKE: in use ' + ' '.join(in_use)) if awake else ('release: no session in use (idle: %s)' % (' '.join(idle) or 'none')))
@@ -147,3 +154,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

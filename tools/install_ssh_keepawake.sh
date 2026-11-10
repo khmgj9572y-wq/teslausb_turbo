@@ -7,10 +7,21 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+[ "${1:-}" = '' ] || [ "${1:-}" = '--dry' ] || { echo 'Unknown option' >&2; exit 1; }
 [ -x /root/bin/tesla-control ] && [ -e /root/.ble/key_private.pem ] || { echo "ABORT: TeslaUSB BLE key/tool missing"; exit 1; }
 grep -q '^export TESLA_BLE_VIN=' /root/teslausb_setup_variables.conf || { echo "ABORT: TESLA_BLE_VIN not set"; exit 1; }
 mount / -o remount,rw
-trap 'sync; mount / -o remount,ro && echo "root back to ro" || echo "WARNING: root still rw"' EXIT
+restore_root() {
+  result=$?
+  trap - EXIT
+  sync
+  if ! mount / -o remount,ro; then
+    echo 'ERROR: root remains writable' >&2
+    result=1
+  fi
+  exit "$result"
+}
+trap restore_root EXIT
 install -m 0755 -o root -g root "$HERE/ssh_keepawake.py" /usr/local/sbin/ssh-keepawake
 install -m 0644 -o root -g root "$HERE/systemd/ssh-keepawake.service" /etc/systemd/system/ssh-keepawake.service
 systemctl daemon-reload
@@ -21,3 +32,4 @@ else
   systemctl enable --now ssh-keepawake.service
   echo "enabled: journalctl -fu ssh-keepawake ; status: sudo ssh-keepawake --status"
 fi
+

@@ -6,7 +6,13 @@ Before=teslausb.service
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
+RuntimeDirectory=teslausb-ble
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/local/lib/teslausb-car-link/ble_prepare.py
+ExecStartPre=/usr/local/lib/teslausb-car-link/ble_adapter_check.py --require-hci0
 ExecStart=/usr/sbin/rfkill unblock bluetooth
+ExecStart=/usr/bin/flock -w 120 /run/lock/hci0.lock /usr/bin/busctl --system --timeout=10s set-property org.bluez /org/bluez/hci0 org.bluez.Adapter1 Powered b true
 
 [Install]
 WantedBy=teslausb.service

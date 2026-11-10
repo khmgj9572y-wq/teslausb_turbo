@@ -15,6 +15,8 @@ installation, then reboot after the first validation to restore read-only.
 ```sh
 sudo /root/bin/remountfs_rw
 sudo install -d -m 755 /usr/local/lib/teslausb-car-link
+sudo install -m 755 /tmp/teslausb-car-link/ble_prepare.py /usr/local/lib/teslausb-car-link/
+sudo install -m 755 /tmp/teslausb-car-link/ble_adapter_check.py /usr/local/lib/teslausb-car-link/
 sudo install -m 755 /tmp/teslausb-car-link/radio_policy.py /tmp/teslausb-car-link/display_owner.py /usr/local/lib/teslausb-car-link/
 sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /tmp/teslausb-car-link/wifi_admin.py /tmp/teslausb-car-link/video_web.py /tmp/teslausb-car-link/portal_session.sh /tmp/teslausb-car-link/portal_cleanup.sh /usr/local/lib/teslausb-car-link/
 sudo install -m 644 /tmp/teslausb-car-link/systemd/* /etc/systemd/system/
@@ -130,6 +132,13 @@ Wi-Fi adapter should be unplugged; the active radios may need a powered hub.
 5. Enable `car-ble-unblock.service` only if cold-boot rfkill reproduces.
    Generate and pair a fresh BLE key on the new image; verify keep-awake and
    remove the old key in the car. Do not copy either private key to the NAS.
+   Install `ble_prepare.py` with the unit. Keep the client's session cache
+   on `/run/teslausb-ble/session-cache.json` (mode 0600), with
+   `/root/.tesla-cache.json` symlinked there. The unit prepares the private
+   runtime directory at boot; the root filesystem can remain read-only.
+   Set the same path in `TESLA_CACHE_FILE` for commands that inherit the
+   TeslaUSB configuration. Keep the actual VIN in the root-only TeslaUSB
+   setup file so its native pairing page can read it.
 6. Check `/dev/watchdog0` and the driver, then install the watchdog manager
    template and verify a safe reboot test on spare media.
 

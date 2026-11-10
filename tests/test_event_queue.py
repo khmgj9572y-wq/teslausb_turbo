@@ -188,6 +188,29 @@ class QueueTests(unittest.TestCase):
         self.assertTrue(transfers[0][-2].endswith("event.json"))
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM files WHERE status='pending'").fetchone()[0], 1)
 
+    def test_returning_home_wifi_pauses_before_next_queued_file(self):
+        event = '2026-11-08_12-00-00'
+        self.add_link('SentryClips', event, 'thumb.png',
+                      event_queue.PNG_START + b'image' + event_queue.PNG_END)
+        self.add_link('SentryClips', event, 'event.json', b'{}')
+        event_queue.scan(self.config, self.db)
+        success = mock.Mock(returncode=0, stdout='', stderr='')
+        with mock.patch.object(event_queue.car_policy, 'home_wifi_reachable',
+                               side_effect=[False, False, True]), \
+             mock.patch.object(event_queue.car_policy, 'current_throttle_flags', return_value=0), \
+             mock.patch.object(event_queue.car_policy, 'update_meter', return_value={'bytes': 0}), \
+             mock.patch.object(event_queue.car_policy, 'cap_mode', return_value='normal'), \
+             mock.patch.object(event_queue.car_policy, 'ntp_synced', return_value=False), \
+             mock.patch.object(event_queue, 'vpn_route_ok', return_value=True), \
+             mock.patch.object(event_queue.subprocess, 'run', return_value=success) as run:
+            self.assertEqual(event_queue.send(self.config, self.db, policy={}), 1)
+        transfers = [c.args[0] for c in run.call_args_list if c.args[0][0] == 'rsync']
+        self.assertEqual(len(transfers), 1)
+        self.assertTrue(transfers[0][-2].endswith('thumb.png'))
+        rows = self.db.execute('SELECT path,status FROM files ORDER BY path').fetchall()
+        self.assertEqual([status for path,status in rows], ['pending', 'sent'])
+        self.assertFalse(self.config['upload_marker'].exists())
+
     def test_soft_cap_stages_only_event_metadata(self):
         event = "2026-11-08_12-00-00"
         self.add_link("SentryClips", event, "event.json", b"{}")
