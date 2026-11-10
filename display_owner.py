@@ -40,6 +40,21 @@ def stop_video(policy):
         return car_control.systemctl('stop', policy['video_service'])
 
 
+def start_video(policy):
+    """Keep the policy check and start together with screen takeover."""
+    import car_control
+    with car_policy.file_lock(LOCK):
+        if busy():
+            return False, 'AirPlay is using the screen'
+        allowed, reason = car_control.video_allowed(policy)
+        if not allowed:
+            return False, reason
+        if not car_control.video_active(policy):
+            if not car_control.systemctl('start', policy['video_service']):
+                return False, 'start failed'
+        return True, 'on'
+
+
 def claim(policy, token):
     import car_control
     with car_policy.file_lock(LOCK):

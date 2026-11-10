@@ -1,6 +1,8 @@
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,6 +11,7 @@ import car_control
 import car_policy
 import display_owner
 import airplay_receiver
+import video_toggle
 
 
 class DisplayOwnerTests(unittest.TestCase):
@@ -64,6 +67,62 @@ class DisplayOwnerTests(unittest.TestCase):
             display_owner.claim(self.policy, 'a' * 32)
             display_owner.release(self.policy, 'b' * 32)
             self.assertTrue(display_owner.busy())
+
+    def test_takeover_waits_for_an_in_progress_moonlight_start(self):
+        checking = threading.Event()
+        continue_start = threading.Event()
+        stop_called = threading.Event()
+        def command(action, service):
+            if action == 'stop':
+                stop_called.set()
+            return True
+        def check_policy(policy):
+            checking.set()
+            if not continue_start.wait(2):
+                raise RuntimeError('Test start was not released')
+            return True, 'allowed'
+        with patch.object(car_control, 'video_active', return_value=False), \
+             patch.object(car_control, 'video_allowed', side_effect=check_policy), \
+             patch.object(car_control, 'systemctl', side_effect=command) as ctl, \
+             ThreadPoolExecutor(max_workers=2) as pool:
+            start = pool.submit(display_owner.start_video, self.policy)
+            self.assertTrue(checking.wait(2))
+            claim_started = threading.Event()
+            def take_screen():
+                claim_started.set()
+                return display_owner.claim(self.policy, 'a' * 32)
+            takeover = pool.submit(take_screen)
+            try:
+                self.assertTrue(claim_started.wait(2))
+                self.assertFalse(stop_called.wait(0.1))
+                self.assertFalse(takeover.done())
+                ctl.assert_not_called()
+            finally:
+                continue_start.set()
+            self.assertEqual(start.result(timeout=2), (True, 'on'))
+            takeover.result(timeout=2)
+            self.assertEqual([c.args[0] for c in ctl.call_args_list], ['start', 'stop'])
+            self.assertTrue(display_owner.busy())
+
+    def test_moonlight_start_is_refused_while_airplay_owns_screen(self):
+        with patch.object(car_control, 'video_active', return_value=False), \
+             patch.object(car_control, 'systemctl', return_value=True) as ctl, \
+             patch.object(car_control, 'video_allowed') as check:
+            display_owner.claim(self.policy, 'a' * 32)
+            ctl.reset_mock()
+            allowed, reason = display_owner.start_video(self.policy)
+            self.assertFalse(allowed)
+            self.assertIn('AirPlay', reason)
+            ctl.assert_not_called()
+            check.assert_not_called()
+
+    def test_gpio_press_during_airplay_cancels_moonlight_resume(self):
+        with patch.object(car_control, 'video_active', return_value=True), \
+             patch.object(car_control, 'systemctl', return_value=True) as ctl:
+            display_owner.claim(self.policy, 'a' * 32)
+            self.assertEqual(video_toggle.toggle(self.policy), 'off')
+            display_owner.release(self.policy, 'a' * 32)
+            self.assertFalse(any(c.args[0] == 'start' for c in ctl.call_args_list))
 
     def test_connection_events_do_not_depend_on_client_identifiers(self):
         self.assertEqual(airplay_receiver.event('raop_rtp_mirror starting mirroring'), 'claim')

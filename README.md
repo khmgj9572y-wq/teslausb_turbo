@@ -8,15 +8,23 @@ vehicle details out of Git.
 
 ## Current state
 
-This is a pre-install bundle. The code has local tests; physical recording,
-sleeping-car UDC behavior, power under load, and the new image still need
-validation. The planned base is Raspberry Pi OS Lite **64-bit Trixie** on a
-new SD card; Bookworm 64-bit is a fallback. Preserve the working SD card as
+This repository contains source and installation templates. Local tests cover
+the queue, policy, Wi-Fi controls, and display handoff; hardware acceptance
+must be completed on each installation. The base is Raspberry Pi OS
+**64-bit Trixie** on a new SD card; Bookworm 64-bit is a fallback. Preserve the working SD card as
 rollback. TeslaUSB's external-drive setup can erase an SSD and needs
 `DATA_DRIVE` set to the whole spare disk (at least 64 GB). Follow
 [IMAGE_PLAN.md](IMAGE_PLAN.md) and use spare media before connecting an
 existing archive drive to a fresh setup run. When the new image passes those
 checks, follow [INSTALL_BUNDLE.md](INSTALL_BUNDLE.md) one feature at a time.
+Use [NEXT_SESSION.md](NEXT_SESSION.md) for the remaining physical checks.
+
+Run `python3 -B tools/check_bundle.py --tests` before publishing an update.
+It checks Python and shell syntax, common private artifacts, literal network
+addresses, and possible vehicle identifiers, then runs the offline tests.
+An optional `--private-terms-file /path/outside/checkout` checks local hostnames,
+SSIDs, or other private terms without printing the matched values. Keep that
+file outside the repository. These checks supplement a diff review.
 
 ## Components
 
@@ -64,6 +72,7 @@ cap is 40 decimal GB: stage/send metadata and thumbnails only, and stop
 Moonlight. The sample hard cap is 60 decimal GB: heartbeat only over LTE.
 Caps reset on the first UTC month **only after NTP is verified**. The queue
 pauses while the home SMB archive is reachable through the configured Wi-Fi uplink.
+It rechecks between files so a batch yields when home Wi-Fi returns.
 The sidecar also reads TeslaUSB's existing home-archive ledger and skips files
 already recorded there. This prevents an existing SSD's historical clips
 from being uploaded again over LTE. A queued file later completed by the
@@ -130,6 +139,9 @@ until the two-radio split and hotspot are active. On mirroring connection,
 Moonlight yields the display; on disconnect it resumes only if previously
 running and still within its original session and policy limits. A manual
 Moonlight Stop cancels resumption. AirPlay has no driving-state lockout.
+Manual, heartbeat, and GPIO Moonlight starts share the screen-owner lock
+with AirPlay takeover. Pressing the GPIO toggle while AirPlay owns the
+screen cancels a paused Moonlight session's automatic return.
 Audio starts disabled until the HDMI speaker path is tested.
 On Trixie, swap is configured as RAM-only zram so its backing file cannot
 hold the SD root writable after package installation.
