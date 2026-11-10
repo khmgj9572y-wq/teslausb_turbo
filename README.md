@@ -45,6 +45,8 @@ file outside the repository. These checks supplement a diff review.
 | `tools/ik41_at_safe.c` | Narrow AT reader for USB mode and PDP APN, with explicit MBIM/RNDIS switching commands. |
 | `examples/80-ik41us-rndis.network` | RNDIS-only DHCP profile with LTE route metric 700. |
 | `systemd/` | Event, guard, policy, heartbeat, BLE unblock, and video units. |
+| `ssh_keepawake.py` | Keep the car awake while SSH is in use; idle sessions stop counting. See [KEEPAWAKE.md](KEEPAWAKE.md). |
+| `tools/install_hci0_lock.sh`, `ble_adapter_check.py` | Serialize car-key Bluetooth access and check UART controller assignment at boot. |
 
 The uploader intentionally reads TeslaUSB's snapshot links and does not
 modify its camera image or archive state. TeslaUSB's normal home Wi-Fi archive

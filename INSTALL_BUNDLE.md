@@ -16,6 +16,7 @@ installation, then reboot after the first validation to restore read-only.
 sudo /root/bin/remountfs_rw
 sudo install -d -m 755 /usr/local/lib/teslausb-car-link
 sudo install -m 755 /tmp/teslausb-car-link/ble_prepare.py /usr/local/lib/teslausb-car-link/
+sudo install -m 755 /tmp/teslausb-car-link/ble_adapter_check.py /usr/local/lib/teslausb-car-link/
 sudo install -m 755 /tmp/teslausb-car-link/radio_policy.py /tmp/teslausb-car-link/display_owner.py /usr/local/lib/teslausb-car-link/
 sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /tmp/teslausb-car-link/wifi_admin.py /tmp/teslausb-car-link/video_web.py /tmp/teslausb-car-link/portal_session.sh /tmp/teslausb-car-link/portal_cleanup.sh /usr/local/lib/teslausb-car-link/
 sudo install -m 644 /tmp/teslausb-car-link/systemd/* /etc/systemd/system/
