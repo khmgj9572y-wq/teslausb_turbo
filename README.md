@@ -159,8 +159,10 @@ internet-tested MT7921AU before modifying profiles.
 identical drivers, the helper never picks the first adapter automatically.
 Set `future_hotspot_mac` only for the dedicated USB hotspot. Without that
 selector, an uplink cutover leaves hotspot/AirPlay disabled and does not
-assign the onboard radio. The hotspot uses 5 GHz by default; reported
-concurrent AP/client and 6 GHz capabilities do not change that default.
+assign the onboard radio. The hotspot uses 5 GHz by default. The driver has
+reported concurrent AP/managed operation on one channel and AP capability
+on 5/6 GHz. Verify combinations and permitted channels on the installed
+firmware and regulatory configuration before using those options.
 Station profiles bound to another radio are preserved during cutover.
 `tools/bind_station_profiles.py --apply` binds unbound/current-uplink station
 profiles to the current uplink MAC without activating a connection or
