@@ -1,0 +1,10 @@
+[Unit]
+Description=Read 4G modem telemetry without changing its connection
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/lte_info.py collect
+TimeoutStartSec=100
+UMask=0077
+Nice=10

@@ -32,6 +32,9 @@ class ControlTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
+        marker = mock.patch.object(car_control, 'UPLOAD_MARKER', root / 'upload-active')
+        marker.start()
+        self.addCleanup(marker.stop)
         self.config = {
             "soft_cap_bytes": 40, "hard_cap_bytes": 60,
             "sunshine_wg_ip": "192.0.2.20", "intake_wg_ip": "192.0.2.10",

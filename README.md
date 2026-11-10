@@ -45,6 +45,7 @@ file outside the repository. These checks supplement a diff review.
 | `tools/ik41_at_safe.c` | Narrow AT reader for USB mode and PDP APN, with explicit MBIM/RNDIS switching commands. |
 | `examples/80-ik41us-rndis.network` | RNDIS-only DHCP profile with LTE route metric 700. |
 | `systemd/` | Event, guard, policy, heartbeat, BLE unblock, and video units. |
+| `lte_info.py`, `tools/ik41_info.c`, `web/4g/` | Protected 4G status, signal history, APN/SIM/network details, USB information, and on-demand identifiers. |
 | `ssh_keepawake.py` | Keep the car awake while SSH is in use; idle sessions stop counting. See [KEEPAWAKE.md](KEEPAWAKE.md). |
 | `tools/install_hci0_lock.sh`, `ble_adapter_check.py` | Serialize car-key Bluetooth access and check UART controller assignment at boot. |
 
@@ -119,6 +120,30 @@ limited to three per hour. A sleeping car may report `not attached` or
 `suspended`; observe this physically before enabling the service by default.
 
 ## Network and video
+
+The **4G** tab is available in both TeslaUSB views. Its collector reads the
+IK41's separate vendor AT interface without detaching the RNDIS data driver
+or changing modem settings. Live reports refresh about every 30 seconds;
+device/APN information is cached for five minutes. A USB-port change or
+re-enumeration clears the old device report, and a newly connected stick is
+given at least 20 seconds to initialize. Collection and its shared AT lock
+have bounded waits; a missing stick or busy interface is reported explicitly.
+
+The page includes operator and registration state, SIM readiness, packet
+attachment and active contexts, RSSI and LTE RSRP/RSRQ ranges, signal history,
+reported band codes, cellular and Pi addresses, DNS, routes, traffic rates,
+error/drop counters, monthly Pi usage and caps, firmware, USB details, and
+raw read-only reports. Fields not supplied by the firmware remain unavailable;
+band codes are not guessed into frequencies. Signal ranges follow
+[3GPP TS 27.007](https://www.etsi.org/deliver/etsi_ts/127000_127099/127007/15.05.00_60/ts_127007v150500p.pdf).
+
+IMEI, IMSI, ICCID, the SIM's phone-number report, and USB serial are requested
+only through **Reveal identifiers**. That action requires an authenticated,
+same-origin POST; normal polling reads a private cache and does not query
+identifiers. There are no reset, USB-mode, APN, firmware, or network-scan
+controls. Runtime data stays under `/run`, outside the web root, and no live
+values belong in Git. The tab inherits the existing web access policy;
+its installer does not rewrite nginx/Caddy authentication or allowlists.
 
 The split-radio setup assigns the USB MT7921AU to client Wi-Fi and the onboard
 radio to a 5 GHz WPA2 car hotspot. Radio roles are resolved using permanent

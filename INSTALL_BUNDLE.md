@@ -80,6 +80,23 @@ the final archive only if absent, and owns staging cleanup.
 
 ## Enable one feature at a time
 
+For the read-only **4G** tab, first verify that the existing server denies
+untrusted access and that the protected UI works. With the bundle on the Pi,
+run `sudo bash tools/install_lte_info.sh`. It requires a C compiler,
+`pkg-config`, and the `libusb-1.0` development headers. It installs the fixed
+read-only query helper, root-owned collector, narrowly scoped CGI sudo rules,
+page assets, navigation for both views, and `car-lte-info.timer`. It makes
+private backups of replaced files and restores read-only root when the root
+was initially read-only. No server configuration is changed.
+
+Verify `/4g/` and `/cgi-bin/car-lte.cgi?action=status` through the protected
+path, and confirm untrusted direct access is denied. Normal polling should
+contain no IMEI, IMSI, ICCID, or USB serial. Test the identifiers separately
+without copying them into logs or the repository. Confirm live signal/network
+readings and correct handling of a disconnected stick, then reconnect it and
+verify recovery without a mode switch. The status cache is private under
+`/run/teslausb-car-link/lte`; APN/device fields can take five minutes to refresh.
+
 For the optional MT7921AU/onboard hotspot split, run
 `sudo bash tools/install_radios_airplay.sh` from this checkout. It backs up
 the installed modules and network settings on the Pi, installs packaged

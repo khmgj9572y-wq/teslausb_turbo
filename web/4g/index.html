@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TeslaUSB 4G</title>
+<style>
+:root {font:16px Arial,Helvetica,sans-serif;color:#202329;background:#f6f7f9;color-scheme:light}
+* {box-sizing:border-box} body {margin:0;padding:18px} main {max-width:1040px;margin:auto}
+header {display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:16px}
+h1 {font-size:1.5rem;margin:0 0 5px} h2 {font-size:1.05rem;margin:0 0 15px}
+.muted,.label {color:#626a76;font-size:.85rem} .muted {line-height:1.5}
+.card {background:white;border:1px solid #d9dee5;border-radius:10px;padding:18px;margin-bottom:14px;min-width:0}
+.grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.grid .card {margin:0}
+.overview {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:18px}
+.value {font-size:1.18rem;font-weight:600;overflow-wrap:anywhere;margin-top:5px}.big {font-size:1.7rem}
+.pill {display:inline-block;padding:6px 10px;border-radius:20px;background:#edf0f4;color:#465365;font-size:.85rem;font-weight:600}
+.pill.good {background:#e9f4ed;color:#21613b}.pill.warn {background:#fff1d7;color:#805600}.pill.bad {background:#fde8e6;color:#a40000}
+.table {width:100%;border-collapse:collapse}.table td,.table th {text-align:left;padding:9px 0;border-top:1px solid #edf0f4;vertical-align:top;overflow-wrap:anywhere}
+.table tr:first-child td,.table tr:first-child th {border-top:0}.table th {font-weight:400;color:#626a76;width:44%;padding-right:12px;font-size:.88rem}.table td {font-size:.9rem;white-space:pre-line}
+button {font:inherit;padding:8px 12px;border:1px solid #bfc7d1;border-radius:6px;background:white;cursor:pointer}button:hover {background:#f0f2f5}button:disabled {opacity:.5;cursor:wait}
+.bar {height:9px;border-radius:8px;background:#edf0f4;overflow:hidden;margin:12px 0 8px}.bar div {height:100%;background:#c40000;border-radius:8px;max-width:100%;transition:width .2s}
+.rate {display:flex;justify-content:space-between;gap:12px;margin:13px 0}.rate .value {font-size:1.05rem}
+.notice {margin:0 0 14px;padding:12px 14px;background:#fff1d7;border-radius:8px;font-size:.9rem;line-height:1.4}
+.plot {height:90px;width:100%;display:block;margin-top:10px}.plot path {fill:none;stroke:#c40000;stroke-width:2.5;vector-effect:non-scaling-stroke}
+.plot line {stroke:#edf0f4;stroke-width:1}.legend {display:flex;justify-content:space-between;color:#626a76;font-size:.78rem}
+details {margin-top:14px}summary {cursor:pointer;font-weight:600}pre {font:12px/1.5 monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f7f9;padding:12px;border-radius:6px;max-height:380px;overflow:auto}
+nav {display:flex;flex-wrap:wrap;gap:18px;margin:20px 0}a {color:#626a76}.spaced {margin-top:14px}.span2 {grid-column:1/-1}
+@media(max-width:650px){body{padding:10px}.grid{grid-template-columns:1fr}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:15px}header{align-items:flex-start}}
+</style>
+</head>
+<body><main>
+<header><div><h1>4G</h1><div class="muted" id="freshness">Reading modem status…</div></div><button id="refresh">Refresh</button></header>
+<div id="notice" class="notice" role="status" hidden></div>
+<section class="card">
+ <span id="connection" class="pill">Checking…</span>
+ <div class="overview">
+  <div><div class="label">Network</div><div id="operator" class="value">—</div></div>
+  <div><div class="label">Radio</div><div id="radio" class="value">—</div></div>
+  <div><div class="label">Registration</div><div id="registration" class="value">—</div></div>
+  <div><div class="label">SIM</div><div id="sim" class="value">—</div></div>
+ </div>
+</section>
+<div class="grid">
+ <section class="card"><h2>Signal</h2>
+  <div class="label">Received signal strength · RSSI</div><div class="value big" id="rssi">—</div>
+  <div class="bar"><div id="signal-fill" style="width:0"></div></div>
+  <table class="table"><tbody id="signal-table"></tbody></table>
+  <svg class="plot" viewBox="0 0 600 90" preserveAspectRatio="none" role="img" aria-label="Recent LTE signal history"><line x1="0" y1="45" x2="600" y2="45"></line><path id="signal-plot"></path></svg>
+  <div class="legend"><span id="history-age">Waiting for samples</span><span>Now</span></div>
+ </section>
+ <section class="card"><h2>Data usage</h2>
+  <div class="label">This Pi · received + sent this month</div><div class="value big" id="month-bytes">—</div>
+  <div class="bar"><div id="usage-fill" style="width:0"></div></div>
+  <div class="muted" id="caps">—</div>
+  <div class="rate"><div><span class="label">Receiving</span><div class="value" id="rx-rate">—</div></div><div><span class="label">Sending</span><div class="value" id="tx-rate">—</div></div></div>
+  <table class="table"><tbody id="usage-table"></tbody></table>
+  <p class="muted">Pi counters include tunnel overhead. This is not the carrier’s billing total or usage from other devices on the plan.</p>
+ </section>
+ <section class="card"><h2>Mobile connection</h2><table class="table"><tbody id="mobile-table"></tbody></table></section>
+ <section class="card"><h2>Pi network link</h2><table class="table"><tbody id="network-table"></tbody></table></section>
+ <section class="card"><h2>Stick and firmware</h2><table class="table"><tbody id="device-table"></tbody></table></section>
+ <section class="card"><h2>Device and SIM identifiers</h2><p class="muted">Identifiers stay hidden until requested. They are read from this stick and are not saved in the browser.</p>
+  <button id="identity-button">Reveal identifiers</button><table class="table spaced"><tbody id="identity-table"></tbody></table>
+ </section>
+ <section class="card span2"><h2>Diagnostics</h2><p class="muted">Read-only modem reports. No USB-mode changes, resets, network scans, or APN changes are sent. A missing reading means this firmware did not supply it.</p>
+  <details><summary>Raw status reports</summary><pre id="raw">Waiting for modem…</pre></details>
+  <details id="command-details"><summary>Reported command list</summary><p class="muted" id="command-note"></p><pre id="commands">Open to read the cached list.</pre></details>
+ </section>
+</div>
+<nav><a href="/">TeslaUSB</a><a href="/new/">Alternative view</a><a href="/wifi/">Wi-Fi</a><a href="/moonlight/">Moonlight</a></nav>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let identityVisible=false, pending=false, commandLoaded=false;
+function value(v) { return v===null || v===undefined || v==='' ? 'Not reported' : String(v); }
+function bytes(n) { if(n===null || n===undefined)return '—'; for(const [scale,label] of [[1e9,'GB'],[1e6,'MB'],[1e3,'KB']]) if(n>=scale)return (n/scale).toFixed(2)+' '+label; return n+' B'; }
+function rate(n) { return n===null || n===undefined ? '—' : (n*8/1000).toFixed(0)+' kb/s'; }
+function table(id,rows) { const target=$(id);target.replaceChildren(); for(const [label,v] of rows) { const tr=document.createElement('tr'),th=document.createElement('th'),td=document.createElement('td');th.scope='row';th.textContent=label;td.textContent=value(v);tr.append(th,td);target.append(tr); } }
+async function api(action) { const options=action==='status' ? {cache:'no-store'} : {method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Car-LTE-Action':'1'},body:'{}'}; const response=await fetch('/cgi-bin/car-lte.cgi?action='+action,options);const data=await response.json();if(!response.ok || !data.ok)throw new Error(data.error || '4G status is unavailable');return data; }
+function notice(text) { $('notice').hidden=!text;$('notice').textContent=text; }
+function plot(points) { const items=points.filter(p=>Number.isFinite(p.rsrp_dbm));if(items.length<2){$('signal-plot').setAttribute('d','');$('history-age').textContent='Waiting for samples';return;}const start=items[0].uptime,end=items.at(-1).uptime;const lo=Math.min(...items.map(p=>p.rsrp_dbm))-3,hi=Math.max(...items.map(p=>p.rsrp_dbm))+3;const path=items.map((p,i)=>(i?'L':'M')+((p.uptime-start)/(end-start)*600).toFixed(1)+','+(80-(p.rsrp_dbm-lo)/(hi-lo)*70).toFixed(1)).join(' ');$('signal-plot').setAttribute('d',path);$('history-age').textContent='RSRP · '+Math.max(1,Math.round((end-start)/60))+' min history'; }
+function render(data) {
+ const usb=data.usb || {},net=data.network || {},m=data.modem || {},signal=m.signal || {},usage=data.usage || {},reg=m.registration || {};
+ const primary=reg.registration || reg.packet_registration || {};
+ const live=usb.present && net.up && m.attached===1 && m.active_contexts?.some(c=>c.active);
+ const label=!data.usb ? 'Reading modem…' : !usb.present ? 'Stick not detected' : data.starting ? 'Modem starting' : live ? (net.preferred || net.tunnel_uses_lte ? '4G in use' : '4G ready · standby') : '4G not connected';
+ $('connection').textContent=label;$('connection').className='pill '+(live?'good':'warn');
+ $('freshness').textContent=data.age_seconds===null || data.age_seconds===undefined ? 'Waiting for the first reading' : 'Updated '+data.age_seconds+'s ago · samples about every 30s';
+ notice(usage.storage_available===false ? 'The monthly usage counter is unavailable because its storage is not mounted.' : data.age_seconds>75 ? 'These readings are stale. The collector may be unavailable.' : data.at_warning || (data.starting ? 'Waiting for the stick to finish starting. The connection is not being changed.' : ''));
+ $('operator').textContent=value(m.operator);$('radio').textContent=value(m.radio || m.system_radio);$('registration').textContent=value(primary.state);$('sim').textContent=value(m.sim_state);
+ $('rssi').textContent=signal.rssi_dbm===null || signal.rssi_dbm===undefined ? 'Not reported' : (signal.rssi_bound || '')+' '+signal.rssi_dbm+' dBm';
+ $('signal-fill').style.width=(Number.isFinite(signal.rssi_code)?signal.rssi_code/31*100:0)+'%';
+ table('signal-table',[['LTE signal power · RSRP',signal.rsrp?.display],['LTE signal quality · RSRQ',signal.rsrq?.display],['Bit-error rate code',signal.ber_code],['Vendor radio readings (raw)',m.vendor_signal_report],['Vendor LTE readings (raw)',m.vendor_lte_report],['SINR units',m.vendor_signal_report?'Scale not verified; raw vendor readings shown':'Not reported'],['Signal reading age',data.at_age_seconds===null || data.at_age_seconds===undefined ? null : data.at_age_seconds+' seconds']]);plot(data.history || []);
+ $('month-bytes').textContent=bytes(usage.bytes);$('usage-fill').style.width=(usage.hard_cap_bytes ? usage.bytes/usage.hard_cap_bytes*100:0)+'%';
+ $('caps').textContent='Soft cap '+bytes(usage.soft_cap_bytes)+' · Hard cap '+bytes(usage.hard_cap_bytes);
+ $('rx-rate').textContent=rate(net.rx_bps);$('tx-rate').textContent=rate(net.tx_bps);
+ const capLabel={normal:'Normal',soft:'Metadata only; video off',hard:'Heartbeat only',unavailable:'Counter unavailable'};
+ table('usage-table',[['Month (UTC)',usage.month || 'Waiting for clock sync'],['Data policy',capLabel[usage.cap_mode]],['Received since interface start',bytes(net.rx_bytes)],['Sent since interface start',bytes(net.tx_bytes)]]);
+ const apn=m.contexts?.find(c=>c.id===1) || m.contexts?.[0]; const bearer=m.bearers?.find(c=>c.id===1) || m.bearers?.[0]; const pdp=m.pdp_addresses?.find(c=>c.id===1) || m.pdp_addresses?.[0];
+ table('mobile-table',[['APN',apn?.apn],['PDP type',apn?.type],['Cellular address report',pdp?.addresses?.join('\n') || bearer?.local_address],['Cellular gateway',bearer?.gateway],['Cellular DNS',[bearer?.dns_primary,bearer?.dns_secondary].filter(Boolean).join('\n')],['Roaming (system report)',m.system_roaming===undefined?null:m.system_roaming?'Yes':'No'],['Packet data attached',m.attached===undefined ? null : m.attached===1?'Yes':'No'],['Active contexts',m.active_contexts?.map(c=>c.id+': '+(c.active?'active':'inactive')).join('\n')],['LTE registration',reg.registration?.state],['Packet registration',reg.packet_registration?.state],['Circuit registration',reg.circuit_registration?.state],['Area code',primary.area_code],['Cell ID',primary.cell_id],['Band report (modem codes)',m.band_codes],['Radio submode',m.system_submode],['Modem functionality',m.functionality]]);
+ table('network-table',[['Interface',net.interface],['Driver',net.driver],['IP addresses',net.addresses?.join('\n')],['Gateway',net.gateway],['DNS servers',net.dns?.join('\n')],['Route metric',net.route_metric],['Preferred internet route',net.preferred===undefined?null:net.preferred?'4G':'Another link'],['Tunnel uses 4G',net.tunnel_uses_lte===undefined?null:net.tunnel_uses_lte?'Yes':'No'],['MTU',net.mtu],['Link state',net.operstate],['Receive / send errors',net.errors?value(net.errors.rx_errors)+' / '+value(net.errors.tx_errors):null],['Receive / send drops',net.errors?value(net.errors.rx_dropped)+' / '+value(net.errors.tx_dropped):null]]);
+ table('device-table',[['Manufacturer (AT)',m.manufacturer],['USB manufacturer',usb.usb_manufacturer],['Model',m.model],['Firmware',m.firmware],['USB product',usb.product],['USB ID',usb.vid && usb.pid ? usb.vid+':'+usb.pid : null],['USB mode',({0:'MBIM',1:'RNDIS',2:'ECM'})[m.usb_mode]],['USB speed',usb.speed_mbps ? usb.speed_mbps+' Mb/s':null],['Declared USB power',usb.max_power],['Device revision',usb.device_revision],['USB path',usb.path],['Runtime power state',usb.runtime_power],['Capabilities',m.capabilities],['Last modem report',m.last_error],['Stick temperature','Not reported'],['Device details age',data.device_age_seconds===null || data.device_age_seconds===undefined?null:data.device_age_seconds+' seconds']]);
+ $('raw').textContent=Object.entries(data.diagnostics || {}).map(([name,reply])=>name+' · '+(reply.ok?'reported':'not reported')+'\n'+reply.text.trim()).join('\n\n') || 'No modem report yet.';
+}
+async function refresh() { if(pending)return;pending=true;$('refresh').disabled=true;try{render(await api('status'));}catch(error){notice(error.message);}finally{pending=false;$('refresh').disabled=false;} }
+$('refresh').addEventListener('click',refresh);
+$('identity-button').addEventListener('click',async()=>{const button=$('identity-button');if(identityVisible){$('identity-table').replaceChildren();identityVisible=false;button.textContent='Reveal identifiers';return;}button.disabled=true;try{const d=await api('identity');table('identity-table',[['IMEI',d.imei],['IMSI',d.imsi],['ICCID',d.iccid],['Phone number report',d.phone],['USB serial',d.usb_serial]]);identityVisible=true;button.textContent='Hide identifiers';}catch(error){notice(error.message);}finally{button.disabled=false;}});
+$('command-details').addEventListener('toggle',async()=>{if(!$('command-details').open || commandLoaded)return;try{const d=await api('supported');$('commands').textContent=d.commands?.join('\n') || 'No command list was reported.';$('command-note').textContent=d.final_ok ? 'Reported by the modem.' : 'Captured report; this firmware did not include a final OK. The list may be incomplete.';commandLoaded=true;}catch(error){$('commands').textContent=error.message;}});
+refresh();setInterval(()=>{if(!document.hidden)refresh();},10000);
+</script></body></html>
