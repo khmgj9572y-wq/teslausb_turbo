@@ -78,3 +78,16 @@ class RadioTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'active hotspot'):
                 radio_services.airplay_prepare()
             self.assertEqual(command.call_count, 1)
+
+    def test_station_profile_dedicated_to_another_radio_is_preserved(self):
+        eligible = radio_policy.profile_uses_uplink
+        self.assertFalse(eligible(self.hotspot, '', '', (self.uplink,), ('wifi-uplink',)))
+        self.assertFalse(eligible('', 'wifi-other', '', (self.uplink,), ('wifi-uplink',)))
+        self.assertFalse(eligible('', '', 'wifi-other', (self.uplink,), ('wifi-uplink',)))
+        self.assertTrue(eligible('', '', 'wifi-uplink', (self.uplink,), ('wifi-uplink',)))
+        self.assertTrue(eligible('', '', '', (self.uplink,), ('wifi-uplink',)))
+
+    def test_terse_mac_escaping_does_not_exclude_the_existing_uplink(self):
+        escaped = self.uplink.replace(':', '\\:').upper()
+        self.assertTrue(radio_policy.profile_uses_uplink(
+            escaped, '', 'wifi-uplink', (self.uplink,), ('wifi-uplink',)))

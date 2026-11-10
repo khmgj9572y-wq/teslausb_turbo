@@ -33,7 +33,7 @@ def load_policy(path):
         "home_archive_port": section.getint("home_archive_port", fallback=445),
         "power_log": Path(section.get("power_log", "/mutable/car-link-power.log")),
         "video_service": section.get("video_service", "car-video.service"),
-        "max_session_seconds": section.getint("max_session_min", fallback=30) * 60,
+        "max_session_seconds": section.getint("max_session_min", fallback=0) * 60,
         "max_handshake_age_seconds": section.getint("max_handshake_age_seconds", fallback=180),
         "intake_wg_ip": section.get("intake_wg_ip", "").strip(),
         "sunshine_wg_ip": section.get("sunshine_wg_ip", "").strip(),
@@ -46,8 +46,8 @@ def load_policy(path):
     }
     if values["soft_cap_bytes"] <= 0 or values["hard_cap_bytes"] <= values["soft_cap_bytes"]:
         raise ValueError("hard_cap_gb must exceed a positive soft_cap_gb")
-    if values["max_session_seconds"] <= 0:
-        raise ValueError("max_session_min must be positive")
+    if values["max_session_seconds"] < 0:
+        raise ValueError("max_session_min must be nonnegative; zero disables the hard limit")
     if values["max_handshake_age_seconds"] <= 0:
         raise ValueError("max_handshake_age_seconds must be positive")
     return values

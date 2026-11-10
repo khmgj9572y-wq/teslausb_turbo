@@ -19,6 +19,7 @@ VIN = re.compile(r'(?<![A-Za-z0-9])[A-HJ-NPR-Z0-9]{8}[0-9X][A-HJ-NPR-Z0-9]{8}(?!
 PRIVATE_KEY = re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----')
 PUBLIC_KEY = re.compile(r'(?<![A-Za-z0-9-])(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-\S+)\s+[A-Za-z0-9+/]{30,}={0,3}')
 WIREGUARD_KEY = re.compile(r'(?i)\b(?:PrivateKey|PublicKey|PresharedKey)\s*=\s*[\'"]?[A-Za-z0-9+/]{43}=')
+MAC_ADDRESS = re.compile(r'(?i)(?<![0-9a-f:])(?:[0-9a-f]{2}:){5}[0-9a-f]{2}(?![0-9a-f:])')
 
 
 def privacy_issues(text, terms=()):
@@ -31,6 +32,10 @@ def privacy_issues(text, terms=()):
             issues.append((number, 'actual SSH public key'))
         if WIREGUARD_KEY.search(line):
             issues.append((number, 'actual tunnel key'))
+        for match in MAC_ADDRESS.finditer(line):
+            value = match.group().lower()
+            if value not in ('00:00:00:00:00:00', 'ff:ff:ff:ff:ff:ff') and not int(value[:2], 16) & 2:
+                issues.append((number, 'non-placeholder controller address'))
         if VIN.search(line):
             issues.append((number, 'possible vehicle identifier'))
         if any(term.casefold() in line.casefold() for term in terms):

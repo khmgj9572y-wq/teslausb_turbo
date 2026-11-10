@@ -62,7 +62,7 @@ DEBIAN_FRONTEND=noninteractive apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y "${stage_packages[@]}"
 lib=/usr/local/lib/teslausb-car-link
 # Install imported modules before updating the services that import them.
-install -m 755 "$src/radio_policy.py" "$src/display_owner.py" "$lib/"
+install -m 755 "$src/radio_policy.py" "$src/display_owner.py" "$src/nm_storage.py" "$lib/"
 if [ ! -f /etc/teslausb-car-radios.json ]; then
   PYTHONPATH="$lib" python3 - "$stage_gid" <<'PY'
 import json,os,sys

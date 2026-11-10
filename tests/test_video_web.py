@@ -61,3 +61,10 @@ class VideoWebTests(unittest.TestCase):
              patch.object(video_web.car_control, "boot_id", return_value="a"), \
              patch.object(video_web.car_policy, "uptime", return_value=400):
             self.assertEqual(video_web.status(self.policy)["remaining_seconds"], 1500)
+
+    def test_unlimited_session_reports_no_countdown(self):
+        self.policy['max_session_seconds'] = 0
+        with patch.object(video_web.car_control, 'video_active', return_value=True):
+            state = video_web.status(self.policy)
+        self.assertIsNone(state['remaining_seconds'])
+        self.assertIsNone(state['max_session_minutes'])

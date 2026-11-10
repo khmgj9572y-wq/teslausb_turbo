@@ -76,6 +76,19 @@ def require_uplink():
     return interface
 
 
+def profile_uses_uplink(bound_mac, bound_interface, active_interface, macs, interfaces):
+    """Preserve station profiles dedicated to any other attached radio."""
+    macs = {value.lower() for value in macs if value}
+    interfaces = {value for value in interfaces if value}
+    # nmcli's terse single-property output escapes the colon separators.
+    bound_mac = (bound_mac or '').replace('\\:', ':').lower()
+    bound_interface = bound_interface if bound_interface != '--' else ''
+    active_interface = active_interface if active_interface != '--' else ''
+    return (not bound_mac or bound_mac in macs) and (
+        not bound_interface or bound_interface in interfaces) and (
+        not active_interface or active_interface in interfaces)
+
+
 if __name__ == '__main__':
     if len(sys.argv) != 2 or sys.argv[1] not in ('uplink', 'hotspot'):
         raise SystemExit('Choose uplink or hotspot')

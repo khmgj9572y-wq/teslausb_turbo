@@ -13,11 +13,11 @@ def status(policy):
     active = car_control.video_active(policy)
     remaining = None
     started = car_policy.read_json(car_control.VIDEO_START)
-    if active and started.get("boot") == car_control.boot_id():
+    if policy["max_session_seconds"] > 0 and active and started.get("boot") == car_control.boot_id():
         remaining = max(0, int(policy["max_session_seconds"] -
                                (car_policy.uptime() - started.get("uptime", 0))))
     return {"ok": True, "active": active, "airplay_active": display_owner.busy(), "remaining_seconds": remaining,
-            "max_session_minutes": policy["max_session_seconds"] // 60}
+            "max_session_minutes": policy["max_session_seconds"] // 60 or None}
 
 
 def act(policy, action, request):

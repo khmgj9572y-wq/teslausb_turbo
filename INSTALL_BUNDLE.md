@@ -18,6 +18,7 @@ sudo install -d -m 755 /usr/local/lib/teslausb-car-link
 sudo install -m 755 /tmp/teslausb-car-link/ble_prepare.py /usr/local/lib/teslausb-car-link/
 sudo install -m 755 /tmp/teslausb-car-link/ble_adapter_check.py /usr/local/lib/teslausb-car-link/
 sudo install -m 755 /tmp/teslausb-car-link/radio_policy.py /tmp/teslausb-car-link/display_owner.py /usr/local/lib/teslausb-car-link/
+sudo install -m 755 /tmp/teslausb-car-link/nm_storage.py /usr/local/lib/teslausb-car-link/
 sudo install -m 755 /tmp/teslausb-car-link/event_queue.py /tmp/teslausb-car-link/car_policy.py /tmp/teslausb-car-link/car_control.py /tmp/teslausb-car-link/heartbeat.py /tmp/teslausb-car-link/gadget_guard.py /tmp/teslausb-car-link/player.sh /tmp/teslausb-car-link/video_toggle.py /tmp/teslausb-car-link/wifi_admin.py /tmp/teslausb-car-link/video_web.py /tmp/teslausb-car-link/portal_session.sh /tmp/teslausb-car-link/portal_cleanup.sh /usr/local/lib/teslausb-car-link/
 sudo install -m 644 /tmp/teslausb-car-link/systemd/* /etc/systemd/system/
 sudo install -m 600 /tmp/teslausb-car-link/examples/teslausb-car-link.ini /etc/teslausb-car-link.ini
@@ -124,7 +125,9 @@ Wi-Fi adapter should be unplugged; the active radios may need a powered hub.
    script. Pair as the non-root OS user on a console, test 720p/30 fps and
    the HDMI mode, then start `car-video.service` manually. Only then enable
    the optional GPIO video button and the heartbeat
-   timer. Test the 30-minute auto-off, home `off` command, soft data cap, and
+   timer. With `max_session_min = 0`, verify the home idle watcher ends an
+   idle session while an active voice/screen session continues. A positive
+   value enables an optional fixed limit. Test the home `off` command, soft data cap, and
    link-drop stop. Before enabling home `on`, the home service must verify
    Park; the Pi has no verified gear-state signal. Keep
    `remote_video_on_enabled = false` in the Pi's config until that gate is
@@ -132,7 +135,9 @@ Wi-Fi adapter should be unplugged; the active radios may need a powered hub.
 5. Enable `car-ble-unblock.service` only if cold-boot rfkill reproduces.
    Generate and pair a fresh BLE key on the new image; verify keep-awake and
    remove the old key in the car. Do not copy either private key to the NAS.
-   Install `ble_prepare.py` with the unit. Keep the client's session cache
+   Install `ble_prepare.py` and `ble_adapter_check.py` with the unit, and run
+   `tools/install_hci0_lock.sh` to provision the shared lock before enabling
+   it. Keep the client's session cache
    on `/run/teslausb-ble/session-cache.json` (mode 0600), with
    `/root/.tesla-cache.json` symlinked there. The unit prepares the private
    runtime directory at boot; the root filesystem can remain read-only.

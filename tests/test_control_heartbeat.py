@@ -89,6 +89,25 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(result, "video stopped: WireGuard handshake stale")
         systemctl.assert_any_call("stop", "car-video.service")
 
+    def test_disabled_hard_limit_does_not_stop_an_active_long_session(self):
+        self.config['max_session_seconds'] = 0
+        with mock.patch.object(car_policy, 'update_meter', return_value={'bytes': 0}), \
+             mock.patch.object(car_policy, 'current_throttle_flags', return_value=0), \
+             mock.patch.object(car_policy, 'active_link', return_value='wifi-uplink'), \
+             mock.patch.object(car_policy, 'uptime', return_value=7200), \
+             mock.patch.object(car_control, 'wg_route', return_value=True), \
+             mock.patch.object(car_control, 'wg_handshake_recent', return_value=True), \
+             mock.patch.object(car_control, 'video_active', return_value=True), \
+             mock.patch.object(car_control, 'boot_id', return_value='boot-a'), \
+             mock.patch.object(car_control, 'systemctl', return_value=True) as ctl, \
+             mock.patch.object(car_control, 'VIDEO_START', Path(self.temp.name) / 'start.json'), \
+             mock.patch.object(car_control, 'HEARTBEAT_STATE', Path(self.temp.name) / 'hb.json'), \
+             mock.patch.object(car_control, 'RUNTIME', Path(self.temp.name)):
+            car_policy.write_json(car_control.VIDEO_START, {'boot': 'boot-a', 'uptime': 100})
+            car_policy.write_json(car_control.HEARTBEAT_STATE, {'last_success_uptime': 7150})
+            self.assertEqual(car_control.tick(self.config), 'video allowed')
+        ctl.assert_not_called()
+
 
 class HeartbeatTests(unittest.TestCase):
     def test_redirect_is_refused(self):

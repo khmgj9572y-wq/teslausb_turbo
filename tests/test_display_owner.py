@@ -68,6 +68,16 @@ class DisplayOwnerTests(unittest.TestCase):
             display_owner.release(self.policy, 'b' * 32)
             self.assertTrue(display_owner.busy())
 
+    def test_disabled_hard_limit_allows_prior_session_to_resume(self):
+        self.policy['max_session_seconds'] = 0
+        with patch.object(car_control, 'video_active', return_value=True), \
+             patch.object(car_control, 'systemctl', return_value=True) as ctl, \
+             patch.object(car_control, 'video_allowed', return_value=(True, 'allowed')):
+            display_owner.claim(self.policy, 'a' * 32)
+            with patch.object(car_policy, 'uptime', return_value=7200):
+                self.assertEqual(display_owner.release(self.policy, 'a' * 32), 'Moonlight resumed')
+            self.assertTrue(any(c.args[0] == 'start' for c in ctl.call_args_list))
+
     def test_takeover_waits_for_an_in_progress_moonlight_start(self):
         checking = threading.Event()
         continue_start = threading.Event()

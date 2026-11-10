@@ -43,3 +43,8 @@ class BundleCheckTests(unittest.TestCase):
         tunnel = 'Public' + 'Key = ' + 'B' * 43 + '='
         issues = check_bundle.privacy_issues(ssh + '\n' + tunnel)
         self.assertEqual(issues, [(1, 'actual SSH public key'), (2, 'actual tunnel key')])
+
+    def test_hardware_addresses_require_review_but_synthetic_fixture_addresses_pass(self):
+        hardware = ':'.join(['00', '11', '22', '33', '44', '55'])
+        self.assertEqual(check_bundle.privacy_issues(hardware), [(1, 'non-placeholder controller address')])
+        self.assertEqual(check_bundle.privacy_issues('02:00:00:00:00:01'), [])

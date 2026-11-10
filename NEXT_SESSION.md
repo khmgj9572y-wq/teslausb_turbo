@@ -45,8 +45,10 @@ being described as deployed.
 - Return to home Wi-Fi during a queued batch. The current transfer may
   finish; the worker must pause before starting the next unarchived file.
 - Use the protected Moonlight Start/Stop controls. Check picture framing,
-  moving video over LTE, the session countdown, and automatic stop at the
-  configured limit. Check the home `off` command separately. Leave remote
+  moving video over LTE, and home idle auto-off. With no hard session limit,
+  confirm active voice/screen use continues past the previous cutoff. If an
+  optional positive limit is configured, check its countdown and stop too.
+  Check the home `off` command separately. Leave remote
   `on` disabled until its home-side prerequisites are verified.
 
 ## USB uplink and AirPlay, after the new adapter arrives

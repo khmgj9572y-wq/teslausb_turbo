@@ -134,7 +134,8 @@ def tick(config):
     if started.get("boot") != boot:
         mark_video_start()
         started = car_policy.read_json(VIDEO_START)
-    if up - float(started.get("uptime", up)) >= config["max_session_seconds"]:
+    if (config["max_session_seconds"] > 0 and
+            up - float(started.get("uptime", up)) >= config["max_session_seconds"]):
         systemctl("stop", config["video_service"])
         return "video stopped: session limit"
     if (up - float(started.get("uptime", up)) > 120 and

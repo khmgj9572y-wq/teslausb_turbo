@@ -127,6 +127,15 @@ MAC addresses in local `/etc/teslausb-car-radios.json`; neither role relies on
 MAC. The cutover helper preserves the home/shop profile priorities and sets
 uplink route metric 600, ahead of LTE at 700. It requires an attached, connected,
 internet-tested MT7921AU before modifying profiles.
+Station profiles bound to another radio are preserved during cutover.
+`tools/bind_station_profiles.py --apply` binds unbound/current-uplink station
+profiles to the current uplink MAC without activating a connection or
+changing radio roles; run it with root temporarily writable. The picker
+always binds new profiles to the configured uplink.
+Both maintenance tools temporarily make NetworkManager's own root mount
+writable when its private namespace retained the read-only flag. They
+restore that flag afterward, including on failure, without restarting the
+manager or changing its protected child mounts.
 
 The hotspot uses a manual address and a separate DHCP server with leases in
 `/run/car-hotspot`, avoiding NetworkManager shared-mode writes to read-only
@@ -190,8 +199,11 @@ controls keep the existing session, data, power, and network limits; starting
 an already running session does not reset its time limit. They do not enable
 heartbeat-driven remote video start.
 
-`max_session_min` defaults to 30. The control timer checks every 30 seconds
-and stops video when the limit, soft LTE cap, current undervoltage, missing
+`max_session_min` defaults to zero, which disables the fixed session cutoff.
+The home idle watcher owns inactivity timeout, allowing an active voice or
+screen session to continue. A positive value enables an optional hard limit.
+The control timer checks every 30 seconds and stops video when an enabled
+limit, soft LTE cap, current undervoltage, missing
 uplink/VPN route, stale WireGuard handshake, or stale heartbeat is detected.
 The handshake check has a two-minute startup grace and a three-minute age
 limit by default. The heartbeat timer sends

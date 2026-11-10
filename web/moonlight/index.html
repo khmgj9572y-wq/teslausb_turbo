@@ -36,7 +36,7 @@ nav { margin-top:20px; } nav a { color:#626a76; margin-right:18px; }
     <button id="stop" type="button">Stop Moonlight</button>
   </div>
   <p id="message" role="status" aria-live="polite"></p>
-  <p class="note">Video appears on the car's HDMI input. The session time limit, data cap, and power checks still apply.</p>
+  <p class="note">Video appears on the car's HDMI input. The home service turns video off when idle. Data and power limits still apply.</p>
 </section>
 <nav><a href="/">TeslaUSB</a><a href="/new/">Alternative view</a><a href="/wifi/">Wi-Fi</a></nav>
 </main>
@@ -51,6 +51,7 @@ function render(data) {
   $('state').textContent=airplay ? 'AirPlay is using the screen' : active ? 'Moonlight is running' : 'Moonlight is stopped';
   $('session').textContent=airplay ? 'Moonlight is paused while AirPlay is connected.' : active && data.remaining_seconds!==null ?
     Math.ceil(data.remaining_seconds/60)+' minutes remaining' :
+    data.max_session_minutes===null ? 'No fixed session limit. Home idle timeout applies.' :
     'Automatic stop after '+data.max_session_minutes+' minutes';
   buttons();
 }

@@ -84,7 +84,8 @@ def release(policy, token=None):
         age = car_policy.uptime() - float(started.get('uptime', -1e9))
         may_resume = (state.get('resume') and state.get('boot') == boot_id() and
                       started.get('boot') == boot_id() and
-                      0 <= age < policy['max_session_seconds'])
+                      age >= 0 and (policy['max_session_seconds'] == 0 or
+                                    age < policy['max_session_seconds']))
         if not may_resume:
             return 'screen released'
         allowed, reason = car_control.video_allowed(policy)

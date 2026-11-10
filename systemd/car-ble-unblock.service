@@ -9,6 +9,7 @@ Type=oneshot
 RemainAfterExit=yes
 RuntimeDirectory=teslausb-ble
 RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 ExecStartPre=/usr/local/lib/teslausb-car-link/ble_prepare.py
 ExecStartPre=/usr/local/lib/teslausb-car-link/ble_adapter_check.py --require-hci0
 ExecStart=/usr/sbin/rfkill unblock bluetooth

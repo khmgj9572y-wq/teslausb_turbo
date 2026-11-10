@@ -19,10 +19,11 @@ import re
 import pwd
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, '/usr/local/lib/teslausb-car-link')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import radio_policy
 import wifi_admin
+import nm_storage
 
 
 def nm(*args):
@@ -37,6 +38,11 @@ def candidate():
 
 
 def apply(interface, mac):
+    with nm_storage.profile_writes():
+        return apply_writable(interface, mac)
+
+
+def apply_writable(interface, mac):
     if os.geteuid() != 0 or os.statvfs('/').f_flag & os.ST_RDONLY:
         raise RuntimeError('Cutover requires root with the root filesystem writable')
     if nm('-g', 'GENERAL.STATE', 'device', 'show', interface).split()[0] != '100':
@@ -70,15 +76,21 @@ def apply(interface, mac):
             shutil.copytree(source, backup / source.name, symlinks=True)
     shutil.copy2(radio_policy.SETTINGS, backup / 'radios.json')
     rebound = 0
-    lines = nm('-t', '-f', 'NAME,UUID,TYPE', 'connection', 'show').splitlines()
+    old_interface = radio_policy.interface_for('uplink', settings)
+    lines = nm('-t', '-f', 'NAME,UUID,TYPE,DEVICE', 'connection', 'show').splitlines()
     for line in lines:
         fields = wifi_admin.split_terse(line)
-        if len(fields) != 3 or fields[2] not in ('wifi', '802-11-wireless'):
+        if len(fields) != 4 or fields[2] not in ('wifi', '802-11-wireless'):
             continue
-        name, identifier, _ = fields
+        name, identifier, _, active_interface = fields
         if name in ('car-hotspot', 'car-uplink-probe') or identifier in managed:
             continue
         if nm('-g', '802-11-wireless.mode', 'connection', 'show', 'uuid', identifier) == 'ap':
+            continue
+        if not radio_policy.profile_uses_uplink(
+                nm('-g', '802-11-wireless.mac-address', 'connection', 'show', 'uuid', identifier),
+                nm('-g', 'connection.interface-name', 'connection', 'show', 'uuid', identifier),
+                active_interface, (settings.get('uplink_mac'), mac), (old_interface, interface)):
             continue
         nm('connection', 'modify', 'uuid', identifier,
            'connection.interface-name', '', '802-11-wireless.mac-address', mac,
