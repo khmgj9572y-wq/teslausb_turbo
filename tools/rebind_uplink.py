@@ -8,7 +8,7 @@ It never accepts or prints Wi-Fi passwords in command-line arguments.
 
 import argparse
 import configparser
-import datetime
+import tempfile
 import json
 import os
 import secrets
@@ -31,13 +31,43 @@ def nm(*args):
 
 
 def candidate():
-    interface = radio_policy.interface_for('candidate', {'candidate_driver': 'mt7921u'})
-    if not interface:
-        raise RuntimeError('MT7921AU is not attached; current radio settings were kept')
-    return interface, radio_policy.permanent_mac(interface)
+    settings = radio_policy.settings()
+    adapters = radio_policy.interfaces_for_driver('mt7921u')
+    selector = settings.get('future_uplink_mac', '')
+    if not selector:
+        raise RuntimeError('Set future_uplink_mac in the local radio config before cutover')
+    interface = radio_policy.interface_for('candidate', {'candidate_mac': selector})
+    if interface not in adapters:
+        raise RuntimeError('The configured USB uplink is unavailable')
+    return interface, selector.lower()
+
+
+def require_usb2(interface):
+    speed = radio_policy.usb_speed(interface)
+    if speed is None or speed > 480:
+        raise RuntimeError('Radio must be on USB 2; keep the SSD alone on USB 3')
+
+
+def hotspot_target(settings, uplink_mac):
+    target = settings.get('future_hotspot_mac', '')
+    if not target and settings.get('split_enabled') and settings.get('hotspot_driver') == 'mt7921u':
+        target = settings.get('hotspot_mac', '')
+    if not target:
+        return None
+    target = target.lower()
+    if target == uplink_mac.lower():
+        raise RuntimeError('Uplink and hotspot require separate USB radios')
+    interface = radio_policy.interface_for('hotspot', {'hotspot_mac': target})
+    if interface not in radio_policy.interfaces_for_driver('mt7921u'):
+        raise RuntimeError('The configured USB hotspot radio is unavailable')
+    require_usb2(interface)
+    return target
 
 
 def apply(interface, mac):
+    if os.geteuid() != 0 or os.statvfs('/').f_flag & os.ST_RDONLY:
+        raise RuntimeError('Cutover requires root with the root filesystem writable')
+    require_usb2(interface)
     with nm_storage.profile_writes():
         return apply_writable(interface, mac)
 
@@ -53,8 +83,7 @@ def apply_writable(interface, mac):
     if probe.returncode or probe.stdout != '204':
         raise RuntimeError('The new adapter has not passed its internet test')
     settings = radio_policy.settings()
-    if mac == settings.get('hotspot_mac'):
-        raise RuntimeError('The onboard hotspot radio cannot be the uplink')
+    hotspot_mac = hotspot_target(settings, mac)
     user = Path('/etc/teslausb-car-wifi.env').read_text()
     match = re.search(r'^PORTAL_USER=([A-Za-z0-9_-]+)$', user, re.M)
     if not match:
@@ -68,9 +97,9 @@ def apply_writable(interface, mac):
         if 'connection' not in parser or 'wifi' not in parser:
             raise RuntimeError('Managed Wi-Fi profile needs repair before cutover')
         parsed_profiles[identifier] = parser
-    stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    backup = Path('/root/car-link-radio-backup') / stamp
-    backup.mkdir(parents=True, mode=0o700)
+    backup_root = Path('/root/car-link-radio-backup')
+    backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    backup = Path(tempfile.mkdtemp(prefix='uplink.', dir=backup_root))
     for source in (Path('/etc/netplan'), Path('/etc/NetworkManager/system-connections'), wifi_admin.STORE):
         if source.is_dir():
             shutil.copytree(source, backup / source.name, symlinks=True)
@@ -109,7 +138,8 @@ def apply_writable(interface, mac):
         wifi_admin.atomic_write(path, output.getvalue().encode())
         wifi_admin.stage(identifier)
         rebound += 1
-    settings.update(uplink_mac=mac, uplink_driver='mt7921u', split_enabled=True)
+    settings.update(uplink_mac=mac, uplink_driver='mt7921u', split_enabled=bool(hotspot_mac),
+                    hotspot_mac=hotspot_mac or '', hotspot_driver='mt7921u')
     wifi_admin.atomic_write(radio_policy.SETTINGS, (json.dumps(settings, indent=2) + '\n').encode())
     # This file has radio identities only; the desktop receiver must read it.
     os.chown(radio_policy.SETTINGS, 0, account.pw_gid)
@@ -117,13 +147,15 @@ def apply_writable(interface, mac):
     directory = Path('/mutable/car-link/radios')
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     key = directory / 'hotspot.pass'
-    if not key.exists():
+    if hotspot_mac and not key.exists():
         wifi_admin.atomic_write(key, (secrets.token_urlsafe(18) + '\n').encode())
     wifi_admin.atomic_write(directory / 'cutover.json', json.dumps({
         'stage': 'profiles-bound-activation-pending', 'interface': interface,
         'uplink_mac': mac, 'profiles_rebound': rebound, 'backup': str(backup)}).encode())
     print('Profiles bound to tested MT7921AU:', rebound)
-    print('Activate the saved uplink profile on that adapter before starting the hotspot.')
+    print('Activate the saved uplink profile on that adapter.')
+    print('USB hotspot is configured; test it before enabling services.' if hotspot_mac else
+          'Hotspot stays disabled until future_hotspot_mac selects its dedicated USB adapter.')
     print('Restore read-only root after the controlled cutover.')
 
 

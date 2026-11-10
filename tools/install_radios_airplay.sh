@@ -41,9 +41,8 @@ if [ -f /etc/rpi/swap.conf ]; then
   printf '[Main]\nMechanism=zram\n' > /etc/rpi/swap.conf.d/90-teslausb-readonly.conf
   systemctl daemon-reload
 fi
-stamp=$(date -u +%Y%m%dT%H%M%SZ)
-stage_backup=/root/car-link-radio-backup/stage-$stamp
-install -d -m 700 "$stage_backup"
+install -d -m 700 /root/car-link-radio-backup
+stage_backup=$(mktemp -d /root/car-link-radio-backup/stage.XXXXXX)
 cp -a /usr/local/lib/teslausb-car-link "$stage_backup/installed-modules"
 tar -cpf "$stage_backup/network-settings.tar" /etc/netplan /etc/NetworkManager/system-connections /etc/avahi/avahi-daemon.conf 2>/dev/null
 chmod 600 "$stage_backup/network-settings.tar"
@@ -72,7 +71,8 @@ board=radio_policy.interface_for('board',{'board_driver':'brcmfmac'})
 if not board: raise SystemExit('Onboard Wi-Fi radio is unavailable')
 mac=radio_policy.permanent_mac(board)
 config={'split_enabled':False,'uplink_mac':mac,'uplink_driver':'brcmfmac',
-        'hotspot_mac':mac,'hotspot_driver':'brcmfmac','future_uplink_driver':'mt7921u',
+        'hotspot_mac':'','hotspot_driver':'mt7921u','future_uplink_driver':'mt7921u',
+        'future_uplink_mac':'','future_hotspot_mac':'','board_driver':'brcmfmac',
         'hotspot':{'ssid':'Car Screen','address':'10.42.0.1/24','channel':36},
         'airplay':{'name':'Car Screen','audio_enabled':False}}
 path=Path('/etc/teslausb-car-radios.json')

@@ -55,8 +55,11 @@ being described as deployed.
 
 Follow the staged cutover in `INSTALL_BUNDLE.md`. First test a temporary
 station profile on the USB adapter while keeping the onboard uplink.
-Then rebind station profiles by permanent MAC and verify the route and
-tunnel before starting the onboard hotspot.
+Select the uplink by `future_uplink_mac`, then rebind station profiles by
+permanent MAC and verify the route and tunnel. The SSD stays alone on USB 3;
+radios use USB 2. Add the dedicated USB hotspot only after the powered hub
+is ready and `future_hotspot_mac` selects the correct adapter. Onboard Wi-Fi
+remains available for vehicle integration. Preserve separate equipment radios.
 
 Check all of the following with a phone:
 

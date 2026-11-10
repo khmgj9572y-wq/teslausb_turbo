@@ -69,6 +69,31 @@ def uplink_interface(net_root=None):
     return interface_for('uplink', net_root=net_root)
 
 
+def interfaces_for_driver(driver, net_root=None):
+    root = Path(net_root) if net_root else NET_ROOT
+    found = []
+    for path in sorted(root.iterdir()) if root.is_dir() else []:
+        try:
+            if (path / 'device/driver').resolve(strict=True).name == driver:
+                found.append(path.name)
+        except OSError:
+            continue
+    return found
+
+
+def usb_speed(interface, net_root=None):
+    root = Path(net_root) if net_root else NET_ROOT
+    device = (root / interface / 'device').resolve()
+    for path in (device, *device.parents):
+        if not (path / 'idVendor').is_file():
+            continue
+        try:
+            return float((path / 'speed').read_text().strip())
+        except (OSError, ValueError):
+            return None
+    return None
+
+
 def require_uplink():
     interface = uplink_interface()
     if not interface:

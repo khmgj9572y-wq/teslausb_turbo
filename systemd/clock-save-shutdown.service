@@ -1,0 +1,17 @@
+[Unit]
+Description=Save a trusted timestamp before shutdown
+DefaultDependencies=no
+RequiresMountsFor=/var/lib/systemd/timesync
+After=var-lib-systemd-timesync.mount systemd-timesyncd.service
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/local/lib/teslausb-car-link/mutable_state.py save-clock
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

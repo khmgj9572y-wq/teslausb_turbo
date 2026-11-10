@@ -23,7 +23,7 @@ sleep as usual.
 ## Sharing the Bluetooth adapter (hci0)
 
 `tesla-control` (go-ble) opens the HCI **user channel**: for each command it
-takes hci0 away from BlueZ (`/org/bluez/hci0` disappears for about a second,
+takes its selected adapter away from BlueZ (the adapter object disappears briefly,
 longer on retries). A BlueZ user that is mid-exchange at that moment (bleak,
 `bluetoothctl`) loses its adapter and connection.
 
@@ -47,7 +47,12 @@ Keep that hold short (seconds): keep-awake nudges wait behind it. A TeslaUSB
 setup run that reinstalls `tesla-control` removes the wrapper; ssh-keepawake
 logs a warning at start, and re-running the installer restores it
 (`--remove` undoes it). For full isolation, give the BlueZ user its own USB
-Bluetooth adapter (hci1) and leave hci0 to `tesla-control`.
+Bluetooth adapter and leave the onboard UART controller to `tesla-control`.
+Controller numbers can swap at boot. The wrapper resolves the UART path
+through sysfs, excludes USB paths, and explicitly adds `-bt-adapter hciN`
+unless an adapter was supplied by the caller. With no UART it logs and runs
+without adding a flag. The lock name remains `/run/lock/hci0.lock` for
+compatibility with existing car-key BlueZ users.
 
 After an upstream reinstall, the lock installer preserves the older `.real`
 binary in a root-only local backup directory and wraps the newly installed
@@ -56,7 +61,8 @@ binary. It fails if root cannot be returned to read-only.
 Install `ble_adapter_check.py` alongside `ble_prepare.py` in the sidecar
 library directory when updating `car-ble-unblock.service`. The boot check
 logs controller numbers and UART/USB transport only, without MAC addresses.
-If UART is no longer hci0, it warns and prevents the power-on step from
-targeting a different controller. The power-on step selects the hci0 BlueZ
-object explicitly and takes the same shared lock as the command wrapper.
+It reports renumbering, and the power-on step selects the resolved UART
+BlueZ object under the same shared lock. It never powers a USB controller
+as a substitute when UART is absent. `tools/install_image_support.sh` installs
+these helpers and reapplies the wrapper after upstream setup replaces it.
 

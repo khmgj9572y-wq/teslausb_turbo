@@ -71,6 +71,15 @@ keep the session cache under its private `/run/teslausb-ble` directory,
 rather than writing a cache onto the read-only root filesystem. See the
 bundle installation instructions for the cache symlink and configuration.
 
+Run `tools/install_image_support.sh` after upstream setup and again after
+updates that replace the command binary. It reapplies the UART-selecting
+lock wrapper and installs the writable BlueZ/clock bind mounts. Seed state
+only once on the Pi; keep real pairing data and all keys off the repository.
+Use the USB layout in `README.md`: SSD alone on USB 3, radios on USB 2, and a
+powered USB 2 hub before expanding the adapter set. Configure USB uplink and
+dedicated USB hotspot selectors locally; leave onboard Wi-Fi available and
+keep separate equipment outside this bundle's roles.
+
 ## Other gates
 
 - Moonlight's official feed lists Raspberry Pi/Trixie ARM64 package 6.2.0-1.

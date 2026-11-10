@@ -80,6 +80,18 @@ the final archive only if absent, and owns staging cleanup.
 
 ## Enable one feature at a time
 
+After the base TeslaUSB setup, run `sudo bash tools/install_image_support.sh`.
+Run it again after an upstream setup/update replaces `tesla-control`. This
+post-setup step seeds local Bluetooth/clock storage once, installs the bind
+mounts and NTP-gated clock-save units, installs UART-aware BLE startup, and
+reapplies the shared-lock wrapper. It leaves active Bluetooth and networking
+alone. Newly enabled mounts take effect on the next agreed reboot; verify
+their source, permissions, and clock advancement then. Existing SSD state is
+preserved. Use `--remove-legacy-fake-clock` only to remove the old saved-clock
+file after a local backup when the old package is absent. The re-wrapper and
+its dependencies remain in `/usr/local/lib/teslausb-car-link/tools/` for local
+reapplication. Real pairings and car credentials stay on the Pi.
+
 For the read-only **4G** tab, first verify that the existing server denies
 untrusted access and that the protected UI works. With the bundle on the Pi,
 run `sudo bash tools/install_lte_info.sh`. It requires a C compiler,
@@ -97,22 +109,30 @@ readings and correct handling of a disconnected stick, then reconnect it and
 verify recovery without a mode switch. The status cache is private under
 `/run/teslausb-car-link/lte`; APN/device fields can take five minutes to refresh.
 
-For the optional MT7921AU/onboard hotspot split, run
+For the optional USB uplink/dedicated USB hotspot layout, run
 `sudo bash tools/install_radios_airplay.sh` from this checkout. It backs up
 the installed modules and network settings on the Pi, installs packaged
 UxPlay and GStreamer dependencies, builds the scoped DNS-SD library, and
 stages the hotspot/receiver units. It leaves the current uplink in place and
 does not enable the split or rewrite nginx/Caddy access rules.
 
-When the MT7921AU arrives, first connect a temporary cloned station profile
+Follow the USB power/layout rules in `README.md`: SSD alone on USB 3, all
+radios on USB 2, and a powered USB 2 hub before adding more AX3000 adapters.
+Set `future_uplink_mac` in the private radio config to select adapter #1.
+Set `future_hotspot_mac` only for the dedicated hotspot adapter #3; the
+separate equipment adapter must not receive a role in this config.
+First connect a temporary cloned station profile
 named `car-uplink-probe` on it, preserving the onboard uplink during the test.
 Use metric 650 for that probe so it stays behind the old uplink at 600.
 After confirming internet access through the new adapter, run
 `rebind_uplink.py --apply` with root writable. The helper saves private
 profile backups on the SD, binds saved station profiles and picker profiles
-to the new permanent MAC, and provisions a root-only hotspot password at
-`/mutable/car-link/radios/hotspot.pass`. Activate the saved uplink profile on
-the MT7921AU, verify its route and tunnel, then enable/start
+to the selected permanent MAC. If a separate USB hotspot is configured and
+present, it provisions a root-only hotspot password at
+`/mutable/car-link/radios/hotspot.pass`. With no hotspot selector it keeps
+the hotspot disabled. Activate the saved uplink profile on
+adapter #1 and verify its route and tunnel. Only after adapter #3 has been
+configured and tested, enable/start
 `car-hotspot.service`, `car-hotspot-dhcp.service`, and `car-airplay.service`.
 Remove the temporary probe profile after success. The new adapter may get a
 different DHCP address; update a home DHCP reservation if one is required.
@@ -122,7 +142,7 @@ private profile backups and the onboard uplink before enabling the hotspot.
 Verify discovery only on the hotspot, actual phone mirroring, screen handoff,
 and HDMI audio before relying on it. Recheck power with SSD writes, LTE
 transmission, hotspot traffic, and decoding together. The old high-draw USB
-Wi-Fi adapter should be unplugged; the active radios may need a powered hub.
+Wi-Fi adapter should be unplugged; use the powered hub for the expanded layout.
 
 1. With the vehicle parked, run `gadget_guard.py once` only after confirming
    TeslaUSB's gadget is meant to be connected. Observe one home archive cycle

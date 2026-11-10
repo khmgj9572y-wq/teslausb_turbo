@@ -1,0 +1,13 @@
+[Unit]
+Description=Writable BlueZ pairing and GATT storage on the local SSD
+RequiresMountsFor=/mutable
+Before=bluetooth.service
+
+[Mount]
+What=/mutable/bluetooth
+Where=/var/lib/bluetooth
+Type=none
+Options=bind
+
+[Install]
+WantedBy=bluetooth.service

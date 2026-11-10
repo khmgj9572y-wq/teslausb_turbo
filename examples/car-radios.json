@@ -1,10 +1,13 @@
 {
   "split_enabled": false,
   "uplink_mac": "REPLACE_WITH_CURRENT_UPLINK_PERMANENT_MAC",
-  "uplink_driver": "mt7921u",
-  "hotspot_mac": "REPLACE_WITH_ONBOARD_PERMANENT_MAC",
-  "hotspot_driver": "brcmfmac",
+  "uplink_driver": "brcmfmac",
+  "hotspot_mac": "",
+  "hotspot_driver": "mt7921u",
   "future_uplink_driver": "mt7921u",
+  "future_uplink_mac": "REPLACE_WITH_USB_UPLINK_PERMANENT_MAC",
+  "future_hotspot_mac": "REPLACE_WITH_USB_HOTSPOT_PERMANENT_MAC",
+  "board_driver": "brcmfmac",
   "hotspot": {"ssid": "Car Screen", "address": "10.42.0.1/24", "channel": 36},
   "airplay": {"name": "Car Screen", "audio_enabled": false}
 }

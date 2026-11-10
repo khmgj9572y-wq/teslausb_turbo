@@ -1,0 +1,13 @@
+[Unit]
+Description=Writable saved clock timestamp on the local SSD
+RequiresMountsFor=/mutable
+Before=systemd-timesyncd.service
+
+[Mount]
+What=/mutable/timesync
+Where=/var/lib/systemd/timesync
+Type=none
+Options=bind
+
+[Install]
+WantedBy=systemd-timesyncd.service

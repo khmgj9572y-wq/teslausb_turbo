@@ -145,13 +145,22 @@ controls. Runtime data stays under `/run`, outside the web root, and no live
 values belong in Git. The tab inherits the existing web access policy;
 its installer does not rewrite nginx/Caddy authentication or allowlists.
 
-The split-radio setup assigns the USB MT7921AU to client Wi-Fi and the onboard
-radio to a 5 GHz WPA2 car hotspot. Radio roles are resolved using permanent
+The planned layout assigns USB MT7921AU adapter #1 to client Wi-Fi and
+adapter #3 to the AirPlay hotspot. Adapter #2 is reserved for separate
+equipment outside this bundle. Onboard Wi-Fi stays available for vehicle
+integration or other use. Until cutover, `split_enabled` remains false and
+the existing onboard uplink stays in place. Radio roles use permanent
 MAC addresses in local `/etc/teslausb-car-radios.json`; neither role relies on
 `wlan0`/`wlan1` numbering. The picker binds new station profiles to the uplink
 MAC. The cutover helper preserves the home/shop profile priorities and sets
 uplink route metric 600, ahead of LTE at 700. It requires an attached, connected,
 internet-tested MT7921AU before modifying profiles.
+`future_uplink_mac` must explicitly select the USB uplink. With several
+identical drivers, the helper never picks the first adapter automatically.
+Set `future_hotspot_mac` only for the dedicated USB hotspot. Without that
+selector, an uplink cutover leaves hotspot/AirPlay disabled and does not
+assign the onboard radio. The hotspot uses 5 GHz by default; reported
+concurrent AP/client and 6 GHz capabilities do not change that default.
 Station profiles bound to another radio are preserved during cutover.
 `tools/bind_station_profiles.py --apply` binds unbound/current-uplink station
 profiles to the current uplink MAC without activating a connection or
@@ -181,6 +190,48 @@ screen cancels a paused Moonlight session's automatic return.
 Audio starts disabled until the HDMI speaker path is tested.
 On Trixie, swap is configured as RAM-only zram so its backing file cannot
 hold the SD root writable after package installation.
+
+## USB layout, Bluetooth storage, and saved time
+
+Keep the SSD alone on a blue USB 3 port. Put Wi-Fi radios, LTE, and USB
+Bluetooth on USB 2. In this layout, USB 3 radio re-enumeration can drop the
+SSD connection; the cutover helper rejects a radio linked at USB 3 speed.
+Use a powered USB 2 hub before adding multiple AX3000 adapters. The Pi 4's
+host ports share a 1.2 A budget; USB over-current can cut every port and take
+the dashcam SSD offline. Before a powered hub is available, limit the
+Pi-powered radio set to one AX3000 plus LTE and USB Bluetooth, with the
+high-draw older USB Wi-Fi adapter unplugged. Check power under load.
+
+| Device | Connection | Bundle role |
+| --- | --- | --- |
+| SSD | USB 3, alone | Dashcam/music backing storage |
+| USB Wi-Fi #1 | Powered USB 2 hub | Uplink, selected by private MAC |
+| USB Wi-Fi #2 | Powered USB 2 hub | Reserved for separate equipment |
+| USB Wi-Fi #3 | Powered USB 2 hub | AirPlay hotspot, selected by private MAC |
+| LTE and USB Bluetooth | USB 2 hub | Mobile data and separate Bluetooth use |
+| Onboard Wi-Fi / UART Bluetooth | Built in | Available Wi-Fi / car-key Bluetooth |
+
+Run `tools/install_image_support.sh` after TeslaUSB setup or an update. It
+reapplies the command wrapper and installs writable local state support
+without restarting Bluetooth or changing network roles. The wrapper selects
+the UART controller through sysfs and passes its actual `hciN` to the binary;
+caller-supplied adapter flags are preserved. The logical shared lock remains
+`/run/lock/hci0.lock` even when controller numbers change. If no UART is found,
+the wrapper logs and uses the binary's default, matching the existing fallback.
+
+BlueZ storage is seeded once from the root copy into root-only
+`/mutable/bluetooth`, then bind-mounted over `/var/lib/bluetooth`. Existing
+pairings and GATT caches on the SSD are never overwritten by reseeding.
+The saved clock uses `/mutable/timesync`, owned by `systemd-timesync`, bound
+over `/var/lib/systemd/timesync`. A one-minute timer and an ordered shutdown
+hook save its timestamp only while the kernel reports NTP synchronization.
+The shutdown hook uses a read-only kernel query, so it does not need D-Bus.
+See [adjtimex(2)](https://man7.org/linux/man-pages/man2/adjtimex.2.html).
+The root copy can still provide an old early-boot lower bound before
+timesyncd advances to the SSD timestamp. This is not an RTC; NTP checks still
+gate dated state and monthly accounting. The image-support installer can
+optionally back up and remove an obsolete legacy saved-clock file when its
+old package is absent.
 
 The Wi-Fi picker is served by TeslaUSB's existing authenticated web server.
 It lists current Wi-Fi and LTE status, nearby networks, and saved profiles.

@@ -1,0 +1,8 @@
+[Unit]
+Description=Save an NTP-trusted timestamp for the next boot
+RequiresMountsFor=/var/lib/systemd/timesync
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/teslausb-car-link/mutable_state.py save-clock
+TimeoutStartSec=10
