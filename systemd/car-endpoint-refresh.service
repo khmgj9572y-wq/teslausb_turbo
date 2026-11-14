@@ -1,0 +1,8 @@
+[Unit]
+Description=Keep car tunnel endpoint IP in step with the home DDNS name
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/car-endpoint-refresh
+TimeoutStartSec=60
