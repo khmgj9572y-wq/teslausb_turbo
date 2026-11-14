@@ -184,6 +184,15 @@ Wi-Fi adapter should be unplugged; use the powered hub for the expanded layout.
 6. Check `/dev/watchdog0` and the driver, then install the watchdog manager
    template and verify a safe reboot test on spare media.
 
+7. If the home WAN address can change, copy `examples/car-endpoint.env` to
+   `/etc/teslausb-car-endpoint.env`, set the home DDNS name, and run
+   `sudo tools/install_endpoint_refresh.sh --dry` then without `--dry`. The
+   car-link code needs an IPv4 literal (route checks, the portal /32 pin), so
+   the IP stays in the files and the timer rewrites it in all three places
+   when the name resolves to a new public address. Lookup failures and
+   non-public answers (captive-portal DNS) change nothing. Root is opened
+   read-write only for that edit.
+
 The services and timers are intentionally disabled in this repository. Keep
 the actual endpoints and keys in `/etc` on the Pi, while counters/logs live
 under `/run`, `/mutable`, or `/backingfiles`.

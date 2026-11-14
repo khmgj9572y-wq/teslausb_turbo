@@ -47,6 +47,7 @@ file outside the repository. These checks supplement a diff review.
 | `systemd/` | Event, guard, policy, heartbeat, BLE unblock, and video units. |
 | `lte_info.py`, `tools/ik41_info.c`, `web/4g/` | Protected 4G status, signal history, APN/SIM/network details, USB information, and on-demand identifiers. |
 | `ssh_keepawake.py` | Keep the car awake while SSH is in use; idle sessions stop counting. See [KEEPAWAKE.md](KEEPAWAKE.md). |
+| `car_endpoint_refresh.sh` | Every 5 minutes, resolve the home DDNS name and rewrite the tunnel endpoint IP (tunnel config, `wg_endpoint_ip`, `WG_ENDPOINT_IP`) when it changes. Install with `tools/install_endpoint_refresh.sh`. |
 | `tools/install_hci0_lock.sh`, `ble_adapter_check.py` | Serialize car-key Bluetooth access and check UART controller assignment at boot. |
 
 The uploader intentionally reads TeslaUSB's snapshot links and does not
