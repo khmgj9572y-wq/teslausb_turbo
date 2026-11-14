@@ -30,3 +30,20 @@ done
 
 section 'Pi undervoltage / throttling flags'
 vcgencmd get_throttled 2>/dev/null || true
+
+section 'Web file browser mounts'
+if [ -e /backingfiles/music_disk.bin ] || [ -e /backingfiles/lightshow_disk.bin ] ||
+   [ -e /backingfiles/boombox_disk.bin ]; then
+    missing=
+    [ -d /var/www/html/fs ] || missing="$missing /var/www/html/fs"
+    [ -f /etc/auto.master.d/www.autofs ] || missing="$missing /etc/auto.master.d/www.autofs"
+    [ -x /root/bin/auto.www ] || missing="$missing /root/bin/auto.www"
+    if [ -n "$missing" ]; then
+        echo "FAIL: drive images exist but the file browser mounts are missing:$missing"
+        echo "      rerun TeslaUSB's web setup step after the images are in place (IMAGE_PLAN.md)"
+    else
+        echo "OK: file browser mounts configured"
+    fi
+else
+    echo "no music/lightshow/boombox image; file browser mounts not expected"
+fi

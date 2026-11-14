@@ -80,6 +80,20 @@ powered USB 2 hub before expanding the adapter set. Configure USB uplink and
 dedicated USB hotspot selectors locally; leave onboard Wi-Fi available and
 keep separate equipment outside this bundle's roles.
 
+## Web file browser mounts
+
+At the pinned commit, `configure-web.sh` creates `/var/www/html/fs`, copies
+`run/auto.www` to `/root/bin/auto.www` and writes
+`/etc/auto.master.d/www.autofs` **only if** `music_disk.bin`,
+`lightshow_disk.bin` or `boombox_disk.bin` already exists in `/backingfiles`
+when it runs. If the images arrive later (moved from another disk, or the
+step-5 reuse of the original SSD without rerunning setup), the browser shows
+no Music/LightShow/Boombox and every listing fails with
+`cd: /var/www/html/fs/Music: No such file or directory` in the nginx error
+log. The current car image is in that state. After the images are in place,
+rerun the web setup step (or create those three items from the same pinned
+commit) and confirm `preflight.sh` reports the browser mounts as OK.
+
 ## Other gates
 
 - Moonlight's official feed lists Raspberry Pi/Trixie ARM64 package 6.2.0-1.
