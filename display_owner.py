@@ -63,9 +63,13 @@ def claim(policy, token):
             if previous.get('token') == token:
                 return 'already owned'
             raise RuntimeError('Another AirPlay receiver owns the screen')
+        started = car_policy.read_json(car_control.VIDEO_START)
+        if started:
+            car_control.lte_elapsed(started, policy, car_policy.uptime())
+            started['lte_was_active'] = False
         state = {'owner': 'airplay', 'boot': boot_id(), 'token': token,
                  'resume': car_control.video_active(policy),
-                 'prior_start': car_policy.read_json(car_control.VIDEO_START)}
+                 'prior_start': started}
         car_policy.write_json(STATE, state)
         if not car_control.systemctl('stop', policy['video_service']):
             STATE.unlink(missing_ok=True)

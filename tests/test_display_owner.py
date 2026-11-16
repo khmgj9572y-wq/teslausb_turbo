@@ -41,7 +41,10 @@ class DisplayOwnerTests(unittest.TestCase):
             self.assertTrue(display_owner.busy())
             self.assertEqual(display_owner.release(self.policy, 'a' * 32), 'Moonlight resumed')
             self.assertFalse(display_owner.busy())
-            self.assertEqual(car_policy.read_json(car_control.VIDEO_START), self.started)
+            restored = car_policy.read_json(car_control.VIDEO_START)
+            self.assertEqual(restored['boot'], self.started['boot'])
+            self.assertEqual(restored['uptime'], self.started['uptime'])
+            self.assertFalse(restored['lte_was_active'])
             self.assertEqual(ctl.call_args_list[0].args, ('stop', 'car-video.service'))
             self.assertEqual(ctl.call_args_list[1].args, ('start', 'car-video.service'))
 

@@ -255,7 +255,7 @@ def collect(policy):
     result = {'ok': True, 'sample_uptime': now, 'usb': hardware(device), 'network': net,
               'modem': info, 'diagnostics': responses, 'history': history, 'at_warning': warning,
               'starting': device is not None and not ready,
-              'usage': {'bytes': meter.get('bytes') if not meter.get('storage_unavailable') else None,
+              'usage': {'bytes': meter.get('bytes') if not (meter.get('storage_unavailable') or meter.get('meter_unavailable')) else None,
                         'month': meter.get('month') if car_policy.ntp_synced(policy) else None,
                         'soft_cap_bytes': policy['soft_cap_bytes'], 'hard_cap_bytes': policy['hard_cap_bytes'],
                         'cap_mode': car_policy.cap_mode(policy, meter) if not meter.get('storage_unavailable') else 'unavailable',
