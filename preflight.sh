@@ -30,3 +30,24 @@ done
 
 section 'Pi undervoltage / throttling flags'
 vcgencmd get_throttled 2>/dev/null || true
+
+section 'Web file browser mounts (configuration only)'
+if [ -e /backingfiles/music_disk.bin ] || [ -e /backingfiles/lightshow_disk.bin ] ||
+   [ -e /backingfiles/boombox_disk.bin ]; then
+    missing=
+    [ -d /var/www/html/fs ] || missing="$missing /var/www/html/fs"
+    [ -f /etc/auto.master.d/www.autofs ] || missing="$missing /etc/auto.master.d/www.autofs"
+    [ -x /root/bin/auto.www ] || missing="$missing /root/bin/auto.www"
+    if [ -n "$missing" ]; then
+        echo "FAIL: file browser mount configuration is missing:$missing"
+    elif ! grep -Eq '^[[:space:]]*/var/www/html/fs[[:space:]]+/root/bin/auto[.]www([[:space:]]|$)' /etc/auto.master.d/www.autofs; then
+        echo 'FAIL: browser autofs master map does not point to the expected executable'
+    elif ! systemctl is-active --quiet autofs.service; then
+        echo 'FAIL: browser mount configuration exists, but autofs is inactive'
+    else
+        echo 'CONFIGURED: reload autofs after repair and verify an actual protected browser listing'
+    fi
+    echo 'See IMAGE_PLAN.md; this probe does not mount images or prove a working browser listing.'
+else
+    echo 'No music/lightshow/boombox image; file browser mounts not expected'
+fi

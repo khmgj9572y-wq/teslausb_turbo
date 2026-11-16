@@ -82,6 +82,29 @@ keep separate equipment outside this bundle's roles.
 
 ## Other gates
 
+### Web file browser mounts
+
+At the pinned TeslaUSB commit, the web setup creates `/var/www/html/fs`,
+`/root/bin/auto.www`, and `/etc/auto.master.d/www.autofs` only if a music,
+lightshow, or boombox image already exists. An SSD reused after setup may
+therefore have a working car music drive but a missing web file browser.
+`preflight.sh` reports missing configuration and an inactive autofs service;
+configuration checks alone do not establish successful browsing.
+
+After images are in place, restore only the missing mount configuration
+from the same pinned source. Do not blindly rerun `configure-web.sh` on a
+customized image: it deletes web assets, overwrites nginx policy, and can
+replace authentication and sudo settings. Back up those settings first.
+The master map entry is `/var/www/html/fs /root/bin/auto.www`; ensure the
+map helper is executable. Reload autofs with `systemctl reload autofs`, or
+start it if inactive, before testing. An agreed reboot is another option.
+
+Verify an actual Music/LightShow/Boombox listing through the protected web
+UI after activation. Upstream's map mounts the image read-write; do this
+only while parked and after checking the car is not using the same image.
+Do not declare recovery complete from preflight's path checks alone, and
+do not mount the original image just to run this read-only probe.
+
 - Moonlight's official feed lists Raspberry Pi/Trixie ARM64 package 6.2.0-1.
   Inspect its repository setup script before running it; do not pipe it
   directly to a shell.
