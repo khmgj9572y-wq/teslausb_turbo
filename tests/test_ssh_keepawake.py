@@ -30,3 +30,12 @@ class SessionActivityTests(unittest.TestCase):
             reasons = ssh_keepawake.session_activity({'TimestampMonotonic': '1'}, history, 2000)
             self.assertEqual(reasons, [])
             self.assertEqual(history[0], (1800, 4))
+
+    def test_long_running_job_and_terminal_input_cannot_extend_login_budget(self):
+        with patch.object(ssh_keepawake, 'cpu_seconds', return_value=100), \
+             patch.object(ssh_keepawake, 'tty_age', return_value=0):
+            self.assertEqual(ssh_keepawake.session_activity(
+                {'TimestampMonotonic': '1'}, [(100, 1)], ssh_keepawake.MAX_SESSION_AGE + 1), [])
+            self.assertIn('new', ssh_keepawake.session_activity(
+                {'TimestampMonotonic': str(int(ssh_keepawake.MAX_SESSION_AGE * 1e6))}, [],
+                ssh_keepawake.MAX_SESSION_AGE + 120))

@@ -28,6 +28,7 @@ def config_from(path):
         "log_file": Path(section.get("log_file", "/mutable/gadget-guard.log")),
         "disable_cmd": section.get("disable_cmd", "/root/bin/disable_gadget.sh"),
         "enable_cmd": section.get("enable_cmd", "/root/bin/enable_gadget.sh"),
+        "cam_image": Path(section.get("cam_image", "/backingfiles/cam_disk.bin")),
         "interval": section.getint("interval_seconds", fallback=30),
         "max_attempts": section.getint("max_replugs_per_hour", fallback=3),
         "settle_seconds": section.getint("settle_seconds", fallback=3),
@@ -108,6 +109,25 @@ def transition_running():
     return False
 
 
+def image_in_use(image, block_root=Path('/sys/block')):
+    """Loop attachment also covers the interval before a filesystem is mounted."""
+    try:
+        if not block_root.is_dir():
+            return True
+        target = Path(image).resolve()
+        for loop in block_root.glob('loop*'):
+            backing = loop / 'loop/backing_file'
+            try:
+                value = backing.read_text().strip()
+            except FileNotFoundError:
+                continue
+            if value and Path('/' + value.lstrip('/')).resolve() == target:
+                return True
+        return False
+    except OSError:
+        return True
+
+
 def recent_attempts(attempts, boot, now):
     kept = []
     for item in attempts:
@@ -128,15 +148,22 @@ def recent_attempts(attempts, boot, now):
 
 
 def check_once(config, state=None, sleep=time.sleep, run=subprocess.run,
-               is_transition=transition_running, up=None, boot=None):
+               is_transition=transition_running, up=None, boot=None, is_image_busy=None):
     state = {} if state is None else dict(state)
     up = uptime() if up is None else up
     boot = boot_id() if boot is None else boot
     if state.get("boot") != boot:
         state["consecutive"] = 0
+        state["was_configured"] = False
         state["boot"] = boot
     state["attempts"] = recent_attempts(state.get("attempts", []), boot, up)
     udc, observed = current_udc_state(config)
+    if observed == 'configured':
+        state['was_configured'] = True
+    if observed == 'suspended' and state.get('was_configured'):
+        state['consecutive'] = 0
+        state['last_state'] = observed
+        return state, 'configured-host-suspended'
     if not udc or observed == "configured":
         state["consecutive"] = 0
         state["last_state"] = observed
@@ -154,7 +181,8 @@ def check_once(config, state=None, sleep=time.sleep, run=subprocess.run,
             append_log(config, "rate limit reached; UDC state=" + observed, up)
             state["last_rate_log_uptime"] = up
         return state, "rate-limited"
-    if is_transition():
+    busy = is_image_busy or (lambda: image_in_use(config.get('cam_image', Path('/backingfiles/cam_disk.bin'))))
+    if is_transition() or busy():
         return state, "teslausb-transition-in-progress"
     # TeslaUSB leaves UDC empty during intentional disconnects. Recheck
     # immediately before running the repair, because there is no short lock.
@@ -174,7 +202,16 @@ def check_once(config, state=None, sleep=time.sleep, run=subprocess.run,
         disable_rc = disable.returncode
     except (OSError, subprocess.TimeoutExpired):
         disable_rc = -1
+    if disable_rc != 0:
+        append_log(config, 'disable failed; enable skipped rc=' + str(disable_rc), up)
+        return state, 'disable-failed'
     sleep(config["settle_seconds"])
+    # Our disconnect should still be unbound. A transition, attached loop,
+    # or another actor's rebind invalidates permission to enable it again.
+    bound, _ = current_udc_state(config)
+    if is_transition() or busy() or bound:
+        append_log(config, 'enable skipped: archive transition, image in use, or gadget rebound', up)
+        return state, 'enable-skipped'
     try:
         enable = run([config["enable_cmd"]], timeout=90, stdout=subprocess.PIPE,
                      stderr=subprocess.STDOUT, universal_newlines=True)

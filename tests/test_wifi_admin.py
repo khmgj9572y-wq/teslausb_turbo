@@ -58,10 +58,47 @@ class WifiAdminTests(unittest.TestCase):
 
     def test_expiry_waits_for_trusted_clock(self):
         with patch.object(wifi_admin, "ensure_store"), \
+             patch.object(wifi_admin, 'recheck_connection'), \
              patch.object(wifi_admin, "synced", return_value=False), \
              patch.object(wifi_admin, "remove") as remove:
             self.assertEqual(wifi_admin.expire()["clock_ready"], False)
             remove.assert_not_called()
+
+    def test_promoted_wifi_is_demoted_when_it_loses_internet(self):
+        identifier = 'd90be53b-40ca-4f81-98fb-73e89a623bb6'
+        profiles = {identifier: {'state': 'ready'}}
+        with patch.object(wifi_admin, 'nmcli') as nm, \
+             patch.object(wifi_admin, 'internet_on_wifi', return_value=False), \
+             patch.object(wifi_admin, 'set_priority') as priority, \
+             patch.object(wifi_admin, 'save_metadata') as save:
+            nm.return_value.stdout = identifier
+            self.assertEqual(wifi_admin.recheck_connection(profiles), 'demoted')
+            priority.assert_called_once_with(identifier, 800)
+            self.assertEqual(profiles[identifier]['state'], 'portal')
+            save.assert_called_once_with(profiles)
+
+    def test_priority_edits_do_not_change_an_ssid_containing_setting_text(self):
+        with tempfile.TemporaryDirectory() as root:
+            identifier = 'd90be53b-40ca-4f81-98fb-73e89a623bb6'
+            store = Path(root)
+            with patch.object(wifi_admin, 'STORE', store), \
+                 patch.object(wifi_admin, 'stage'), patch.object(wifi_admin, 'nmcli'):
+                path = wifi_admin.profile_file(identifier)
+                data = wifi_admin.create_keyfile(identifier, ' autoconnect=false ', 'password12',
+                                                False, uplink_mac='02:00:00:00:00:01')
+                path.write_bytes(data)
+                wifi_admin.promote(identifier)
+                text = path.read_text()
+                self.assertIn('ssid = \\sautoconnect=false\\s', text)
+                self.assertEqual(text.count('route-metric = 600'), 2)
+                wifi_admin.set_priority(identifier, 800)
+                self.assertIn('ssid = \\sautoconnect=false\\s', path.read_text())
+
+    def test_protected_wifi_is_not_demoted_by_the_picker(self):
+        with patch.object(wifi_admin, 'nmcli') as nm, patch.object(wifi_admin, 'internet_on_wifi') as probe:
+            nm.return_value.stdout = 'protected-uuid'
+            self.assertIsNone(wifi_admin.recheck_connection({}))
+            probe.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -5,12 +5,16 @@
 
 Every 30 s it looks at SSH sessions (logind `Service=sshd`, `Remote=yes`,
 active, older than 60 s). A session is **in use** if, in the last 15 minutes,
-its terminal had input or output, its processes used at least 2 s of CPU
+its terminal had input, its processes used at least 2 s of CPU
 (a running job without a terminal), or it logged in. While any session is in
 use it sends TeslaUSB's keep-awake nudge (`tesla-control ... charge-port-close`
 over BLE) every 4 minutes, and skips a nudge while TeslaUSB's own keep-awake
 task runs. Idle sessions are never closed: they stop counting and the car can
-sleep as usual.
+sleep as usual. Every login has a three-hour maximum awake allowance,
+anchored to its logind timestamp. Output from `tail -f` or `watch` does not
+count as input. Once the allowance expires, that login no longer holds the
+car awake even if it is busy; a fresh login gets a new allowance. Restarting
+the daemon does not renew the old session. No SSH session is disconnected.
 
 - The nudge closes an open charge-port door when no cable is plugged in (the
   same command TeslaUSB's keep-awake uses).

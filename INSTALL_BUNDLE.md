@@ -35,11 +35,16 @@ The video service runs as a non-root account and sources its settings file.
 Set `/etc/teslausb-car-video.env` to `root:<that account's group>` mode 0640
 before starting it; the file may later contain a private fallback stream URL.
 
-For the Wi-Fi tab, install Debian's `xvfb`, `x11vnc`, `websockify`, and
+For the Wi-Fi tab, install Debian's `xauth`, `xvfb`, `x11vnc`, `websockify`, and
 `novnc` packages while root is writable. Copy `web/wifi/` to
 `/var/www/html/wifi/` and `web/wifi_api.cgi` to
 `/var/www/html/cgi-bin/car-wifi.cgi`. Set `PORTAL_USER` in root-owned,
-mode-0600 `/etc/teslausb-car-wifi.env` to the Pi's non-root account. Run
+mode-0600 `/etc/teslausb-car-wifi.env` to `car-portal`. Before opening a portal,
+run `sudo bash tools/install_web_privileges.sh <desktop-user>` with no portal
+session running. This creates the isolated no-sudo browser account, writes
+`DISPLAY_USER` separately for AirPlay, and adds explicit sidecar sudo rules.
+It does not remove upstream blanket sudo grants: review those separately.
+The page relies on the existing authenticated web/proxy boundary. Run
 `tools/install_wifi_ui.py` after confirming TeslaUSB's nginx Basic auth is
 enabled; it adds the Wi-Fi entry to the classic and alternative views and a
 protected local noVNC reverse proxy. Check `nginx -t` before reloading.
@@ -74,7 +79,7 @@ and preserve a nonempty invalid file for inspection. Keep private keys mode
 forced command should be `rrsync -wo -no-del` rooted at a staging directory.
 Use `ssh_path = .` in the local config for that restricted root. Confirm the server's SSH host key out of
 band; `event_queue.py` requires strict host-key checking. The home host must
-accept the sender's `-rtR --ignore-existing --partial-dir=.partial` transfer;
+accept the sender's `-rtR --checksum --partial-dir=.partial` transfer;
 do one harmless file first. Home then hard-links each completed file into
 the final archive only if absent, and owns staging cleanup.
 
@@ -164,8 +169,10 @@ Wi-Fi adapter should be unplugged; use the powered hub for the expanded layout.
    the optional GPIO video button and the heartbeat
    timer. With `max_session_min = 0`, verify the home idle watcher ends an
    idle session while an active voice/screen session continues. A positive
-   value enables an optional fixed limit. Test the home `off` command, soft data cap, and
-   link-drop stop. Before enabling home `on`, the home service must verify
+   value enables an optional fixed limit. Test the home `off` command, soft data cap,
+   the separate `max_lte_session_min = 120` cellular budget. That budget
+   accumulates LTE time only and is not extended by repeated `keep` replies.
+   and link-drop stop. Before enabling home `on`, the home service must verify
    Park; the Pi has no verified gear-state signal. Keep
    `remote_video_on_enabled = false` in the Pi's config until that gate is
    verified. The heartbeat timer can run with remote `on` disabled.
@@ -187,3 +194,12 @@ Wi-Fi adapter should be unplugged; use the powered hub for the expanded layout.
 The services and timers are intentionally disabled in this repository. Keep
 the actual endpoints and keys in `/etc` on the Pi, while counters/logs live
 under `/run`, `/mutable`, or `/backingfiles`.
+
+When upgrading the upload worker, stop its scan/send/prune timers and wait
+for all three services to finish before swapping files or backing up its
+SQLite database. The next database open adds retry columns without clearing
+old records. Keep the database backup with the old code for rollback; do not
+run mixed old/new workers because the shared queue lock replaces the earlier
+per-operation locks. Restart the timers after syntax and offline tests pass.
+The receiver must accept checksum-aware re-sends into staging while retaining
+its atomic no-clobber final publisher. Confirm that transport separately.

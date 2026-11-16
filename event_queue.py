@@ -143,6 +143,12 @@ def database(config):
         sent_at INTEGER
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS files_pending ON files(status, priority, updated_at)")
+    columns = {row[1] for row in db.execute('PRAGMA table_info(files)')}
+    for name, definition in [('failures', 'INTEGER NOT NULL DEFAULT 0'),
+                              ('retry_boot', "TEXT NOT NULL DEFAULT ''"),
+                              ('retry_uptime', 'REAL NOT NULL DEFAULT 0')]:
+        if name not in columns:
+            db.execute('ALTER TABLE files ADD COLUMN ' + name + ' ' + definition)
     db.execute("""CREATE TABLE IF NOT EXISTS observations (
         path TEXT PRIMARY KEY,
         snapshot_number INTEGER NOT NULL,
@@ -217,9 +223,9 @@ def mp4_stable_in_snapshots(db, relative, source, stat, required):
     row = db.execute("""SELECT snapshot_number, source_size,
         source_mtime_ns, stable_count FROM observations WHERE path=?""",
         (str(relative),)).fetchone()
-    if row and number == row[0]:
+    if row and number <= row[0]:
         return row[3] >= required
-    if (row and number == row[0] + 1 and
+    if (row and number > row[0] and
             (stat.st_size, stat.st_mtime_ns) == (row[1], row[2])):
         count = min(required, row[3] + 1)
     else:
@@ -295,6 +301,11 @@ def scan(config, db, policy=None):
     skipped = 0
     now = time.time()
     home_archived = archived_paths(config)
+    # The CLI holds the shared queue lock, so no sender can be using one of
+    # these incomplete local staging files when the next scan removes it.
+    for temporary in config['spool_root'].rglob('.staging-*'):
+        if temporary.is_file() and not temporary.is_symlink():
+            temporary.unlink()
     spool_bytes = db.execute("SELECT COALESCE(SUM(size), 0) FROM files").fetchone()[0]
     for clip_type in CLIP_DIRS:
         clip_root = root / clip_type
@@ -322,6 +333,13 @@ def scan(config, db, policy=None):
                     if not source.is_file() or stat.st_size > MAX_FILE_SIZE:
                         skipped += 1
                         continue
+                    row = db.execute(
+                        'SELECT source_size, source_mtime_ns, status, size FROM files WHERE path=?',
+                        (str(relative),)).fetchone()
+                    destination = config['spool_root'] / relative
+                    if row and row[0:2] == (stat.st_size, stat.st_mtime_ns):
+                        if row[2] == 'sent' or destination.is_file():
+                            continue
                     if not valid_sidecar(source, candidate.name):
                         skipped += 1
                         continue
@@ -333,16 +351,8 @@ def scan(config, db, policy=None):
                     if (stat.st_mtime <= now + 60 and
                             now - stat.st_mtime < min_file_age):
                         continue
-                    row = db.execute(
-                        "SELECT source_size, source_mtime_ns, status FROM files WHERE path=?",
-                        (str(relative),),
-                    ).fetchone()
-                    destination = config["spool_root"] / relative
-                    if row and row[0:2] == (stat.st_size, stat.st_mtime_ns):
-                        if row[2] == "sent" or destination.is_file():
-                            continue
-                    existing_bytes = destination.stat().st_size if destination.is_file() else 0
-                    extra_bytes = max(0, stat.st_size - existing_bytes)
+                    existing_bytes = row[3] if row else 0
+                    extra_bytes = stat.st_size - existing_bytes
                     video_limit = (config["max_spool_bytes"] -
                                    config.get("metadata_reserve_bytes", 0))
                     if (spool_bytes + extra_bytes > config["max_spool_bytes"] or
@@ -408,8 +418,17 @@ def send(config, db, policy=None):
                  video.returncode == 0 else config["bandwidth_kib"])
     sent = 0
     home_archived = archived_paths(config)
+    boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip() if Path('/proc/sys/kernel/random/boot_id').exists() else 'local-test'
+    up = car_policy.uptime()
     rows = db.execute("""SELECT path, sha256, priority FROM files WHERE status='pending'
-        ORDER BY priority, path DESC LIMIT ?""", (config["max_files"],)).fetchall()
+        AND (retry_boot != ? OR retry_uptime <= ?)
+        ORDER BY priority, path DESC LIMIT ?""", (boot, up, config['max_files'])).fetchall()
+    def failed(relative, digest):
+        failures = db.execute('SELECT failures FROM files WHERE path=?', (relative,)).fetchone()[0] + 1
+        delay = min(3600, 60 * 2 ** min(failures - 1, 6))
+        db.execute('UPDATE files SET failures=?, retry_boot=?, retry_uptime=? WHERE path=? AND sha256=?',
+                   (failures, boot, car_policy.uptime() + delay, relative, digest))
+        db.commit()
     for relative_string, digest, file_priority in rows:
         if relative_string in home_archived:
             # CIFS may deliver a pending file while the LTE worker is paused.
@@ -442,11 +461,24 @@ def send(config, db, policy=None):
         source = config["spool_root"] / relative
         if not source.is_file():
             print("missing queued file: " + relative_string, file=sys.stderr)
+            failed(relative_string, digest)
+            continue
+        actual = hashlib.sha256()
+        try:
+            with source.open('rb') as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                    actual.update(chunk)
+            if actual.hexdigest() != digest:
+                source.unlink()  # Sidecar copy only; the next scan restages the original.
+                failed(relative_string, digest)
+                continue
+        except OSError:
+            failed(relative_string, digest)
             continue
         source_arg = "./" + relative_string
         account = "{}@{}".format(config["ssh_user"], config["ssh_host"])
         remote = "{}:{}/".format(account, config["ssh_path"])
-        command = ["rsync", "-rtR", "--omit-dir-times", "--ignore-existing",
+        command = ["rsync", "-rtR", "--omit-dir-times", '--checksum',
                    "--partial-dir=.partial", "--timeout=60",
                    "--bwlimit={}".format(bandwidth),
                    "-e", " ".join(shlex.quote(part) for part in ssh), source_arg, remote]
@@ -454,9 +486,13 @@ def send(config, db, policy=None):
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.touch()
         try:
-            result = subprocess.run(command, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, universal_newlines=True,
-                                    timeout=3600, cwd=str(config["spool_root"]))
+            try:
+                result = subprocess.run(command, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, universal_newlines=True,
+                                        timeout=3600, cwd=str(config["spool_root"]))
+            except (OSError, subprocess.TimeoutExpired):
+                failed(relative_string, digest)
+                continue
         finally:
             try:
                 marker.unlink()
@@ -465,7 +501,8 @@ def send(config, db, policy=None):
         if result.returncode != 0:
             print("upload failed for {}: {}".format(
                 relative_string, result.stderr.strip()[-500:]), file=sys.stderr)
-            break
+            failed(relative_string, digest)
+            continue
         trusted_time = policy is None or car_policy.ntp_synced(policy)
         db.execute("UPDATE files SET status='sent', sent_at=? WHERE path=? AND sha256=?",
                    (int(time.time()) if trusted_time else 0, relative_string, digest))
@@ -512,16 +549,16 @@ def main():
     db = database(config)
     try:
         if args.command == "scan":
-            with lock(config["spool_root"], "scan"):
+            with lock(config["spool_root"], "queue"):
                 policy = car_policy.load_policy(args.config)
                 staged, skipped = scan(config, db, policy)
                 print("staged {} files; skipped {} for retry/review".format(staged, skipped))
         elif args.command == "send":
-            with lock(config["spool_root"], "send"):
+            with lock(config["spool_root"], "queue"):
                 policy = car_policy.load_policy(args.config)
                 print("uploaded {} files".format(send(config, db, policy)))
         elif args.command == "prune":
-            with lock(config["spool_root"], "scan"):
+            with lock(config["spool_root"], "queue"):
                 print("removed {} sent local copies".format(prune(config, db)))
         else:
             status(db)

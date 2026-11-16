@@ -9,6 +9,7 @@ MODULE = Path(__file__).resolve().parents[1] / "gadget_guard.py"
 SPEC = importlib.util.spec_from_file_location("gadget_guard", str(MODULE))
 guard = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(guard)
+IMAGE_IN_USE = guard.image_in_use
 
 
 class GuardTests(unittest.TestCase):
@@ -34,13 +35,18 @@ class GuardTests(unittest.TestCase):
             "settle_seconds": 3,
             "verify_seconds": 10,
         }
+        patcher = mock.patch.object(guard, 'image_in_use', return_value=False)
+        patcher.start(); self.addCleanup(patcher.stop)
 
     def test_two_checks_then_replug_and_log_result(self):
         calls = []
 
         def fake_run(command, **_):
             calls.append(command[0])
+            if command[0].endswith('disable_gadget.sh'):
+                self.udc_file.write_text('\n')
             if command[0].endswith("enable_gadget.sh"):
+                self.udc_file.write_text('test-udc\n')
                 self.udc_state.write_text("configured\n")
             return mock.Mock(returncode=0)
 
@@ -95,6 +101,51 @@ class GuardTests(unittest.TestCase):
                                                is_transition=change_udc)
         self.assertEqual(outcome, "changed-before-action")
         self.assertFalse(next_state["attempts"])
+
+    def test_failed_disable_never_enables_or_waits(self):
+        run = mock.Mock(return_value=mock.Mock(returncode=1)); sleep = mock.Mock()
+        state, result = guard.check_once(self.config, {'boot': 'a', 'consecutive': 1},
+            up=100, boot='a', is_transition=lambda: False, run=run, sleep=sleep)
+        self.assertEqual(result, 'disable-failed')
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_args.args[0], [self.config['disable_cmd']])
+        sleep.assert_not_called()
+
+    def test_loop_attachment_blocks_enable_even_before_filesystem_mount(self):
+        root = Path(self.temp.name) / 'block'
+        loop = root / 'loop7/loop'; loop.mkdir(parents=True)
+        image = Path(self.temp.name) / 'camera.bin'; image.touch()
+        (loop / 'backing_file').write_text(str(image))
+        self.assertTrue(IMAGE_IN_USE(image, root))
+        self.assertFalse(IMAGE_IN_USE(image.with_name('different.bin'), root))
+
+    def test_archive_starting_during_settle_blocks_enable(self):
+        for kind in ('transition', 'loop', 'rebound'):
+            self.udc_file.write_text('test-udc\n')
+            changed = {'busy': False}
+            def run(command, **kwargs):
+                self.udc_file.write_text('\n')
+                return mock.Mock(returncode=0)
+            def settle(_):
+                changed['busy'] = True
+                if kind == 'rebound': self.udc_file.write_text('test-udc\n')
+            runner = mock.Mock(side_effect=run)
+            _, result = guard.check_once(self.config, {'boot': 'a', 'consecutive': 1},
+                up=100, boot='a', run=runner, sleep=settle,
+                is_transition=lambda: kind == 'transition' and changed['busy'],
+                is_image_busy=lambda: kind == 'loop' and changed['busy'])
+            self.assertEqual(result, 'enable-skipped', kind)
+            self.assertEqual(runner.call_count, 1, kind)
+
+    def test_suspended_after_configured_does_not_trigger_replug(self):
+        self.udc_state.write_text('configured\n')
+        state, _ = guard.check_once(self.config, up=100, boot='a')
+        self.udc_state.write_text('suspended\n')
+        run = mock.Mock()
+        for up in (130, 160, 190):
+            state, result = guard.check_once(self.config, state, up=up, boot='a', run=run)
+            self.assertEqual(result, 'configured-host-suspended')
+        run.assert_not_called()
 
 
 if __name__ == "__main__":

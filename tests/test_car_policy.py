@@ -74,6 +74,20 @@ class MeterTests(unittest.TestCase):
         resumed = policy.update_meter(self.config, boot="a", month="2026-11", sync=True)
         self.assertEqual(resumed["bytes"], 350)
 
+    def test_corrupt_meter_is_preserved_and_caps_fail_closed(self):
+        self.config['meter_file'].write_text('{truncated')
+        state = policy.update_meter(self.config, boot='a', month='2026-11', sync=True)
+        self.assertTrue(state['meter_unavailable'])
+        self.assertEqual(policy.cap_mode(self.config, state), 'hard')
+        self.assertEqual(self.config['meter_file'].read_text(), '{truncated')
+
+    def test_valid_json_with_bad_counter_fields_is_also_closed(self):
+        for contents in ['{"bytes":0,"rx":"bad"}', '{"bytes":0,"month":42}', '{"bytes":true}']:
+            self.config['meter_file'].write_text(contents)
+            state = policy.update_meter(self.config, boot='a', month='2026-11', sync=True)
+            self.assertEqual(policy.cap_mode(self.config, state), 'hard')
+            self.assertEqual(self.config['meter_file'].read_text(), contents)
+
 
 if __name__ == "__main__":
     unittest.main()

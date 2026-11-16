@@ -60,7 +60,7 @@ shorter intervals require physical recording validation.
 the validated `thumb.png` goes first, then a complete `event.json` or
 `events.json`, then the front camera and other MP4s. JSON must parse as an
 object; a thumbnail must have the PNG signature and final IEND chunk. MP4s
-must have the same size and mtime in two consecutive distinct TeslaUSB
+must have the same size and mtime in two distinct increasing TeslaUSB
 snapshots. At the default snapshot cadence of about 3,480 seconds, this can
 delay an MP4 by nearly an hour. Measure and safely shorten that cadence on
 the spare image before promising video delivery within a few minutes. The
@@ -85,7 +85,7 @@ The intake SSH key is expected to run `rrsync -wo -no-del` and accept rsync only
 a **staging root**, separate from the final `footage/` archive. The Pi sends
 relative `SavedClips/<event>/<file>` and `SentryClips/<event>/<file>` paths;
 it does not run a remote shell command. It preserves file mtimes, uses
-`--ignore-existing` for repeated uploads to staging, and keeps interrupted
+`--checksum` so a changed re-staged file is not silently skipped, and keeps interrupted
 files in `.partial` until they finish. The home intake creates the restricted
 staging root before the Pi connects. See
 `examples/teslausb-car-link.ini` for **placeholder** connection fields.
@@ -98,7 +98,14 @@ size and mtime is a duplicate; a difference is a conflict that the home
 side alerts on. It never overwrites the SMB archive. Home
 owns staging cleanup. The staging and final paths must support same-filesystem
 hard links; this needs an end-to-end intake test. The Pi counts a file as
-delivered when its rsync exits zero and prunes only its local queued copy.
+delivered when its checksum-aware rsync exits zero and prunes only its local
+queued copy. Before sending, it verifies the queued copy's SHA-256 against
+its staging record. A damaged queued copy is removed for restaging from the
+unchanged TeslaUSB original. Failures back off exponentially from one minute
+to one hour per file without blocking other events. Retry columns are added
+to existing databases without deleting delivery records. Scan, send, and
+prune share a queue lock. Interrupted local staging files are cleaned under
+that lock, and already-staged/sent files skip repeated sidecar validation.
 
 TeslaUSB's CIFS archive also uses rsync with `-a` and therefore normally
 skips an existing file with the same size and mtime. It does not use
@@ -118,6 +125,12 @@ them, and logs the resulting UDC state after ten seconds to
 `/mutable/gadget-guard.log`. Attempt counters live under `/mutable` and are
 limited to three per hour. A sleeping car may report `not attached` or
 `suspended`; observe this physically before enabling the service by default.
+Enable is skipped after a failed disable, if another transition starts, if
+the camera image becomes loop-attached, or if another actor rebinds the UDC
+during the settle interval. A previously configured connection that becomes
+suspended is left alone. These rechecks reduce the archive race; they are
+not a shared transaction lock with upstream's entire mount/archive sequence.
+Keep the service disabled pending parked archive/reconnect and sleep testing.
 
 ## Network and video
 
@@ -239,6 +252,12 @@ The Wi-Fi picker is served by TeslaUSB's existing authenticated web server.
 It lists current Wi-Fi and LTE status, nearby networks, and saved profiles.
 New profiles and expiration state live on `/mutable`; root-only keyfile copies
 under `/run/NetworkManager/system-connections` are loaded after reboot.
+The five-minute expiry timer also re-probes the active picker-owned network.
+If a promoted connection loses internet access, its metric returns to 800
+so LTE at 700 regains priority; a later full probe promotes it to 600 again.
+Protected home/shop profiles are not changed by this check. Profile mutations
+and expiry use one metadata lock. Keyfile edits change named settings rather
+than replacing setting-like text in an SSID.
 Existing home and shop profiles are shown but cannot be deleted from the tab.
 A new network starts with a lower route priority than LTE. After it passes an
 internet check, it becomes the preferred route. A captive portal leaves LTE
@@ -280,6 +299,10 @@ heartbeat-driven remote video start.
 `max_session_min` defaults to zero, which disables the fixed session cutoff.
 The home idle watcher owns inactivity timeout, allowing an active voice or
 screen session to continue. A positive value enables an optional hard limit.
+Independently, `max_lte_session_min` defaults to 120 and must be positive.
+It limits accumulated LTE time in one video session even if the home watcher
+stalls. Wi-Fi intervals do not consume that budget or reset it; starting a
+new session resets it. Heartbeat `keep` does not extend the LTE budget.
 The control timer checks every 30 seconds and stops video when an enabled
 limit, soft LTE cap, current undervoltage, missing
 uplink/VPN route, stale WireGuard handshake, or stale heartbeat is detected.
@@ -296,6 +319,16 @@ false, so heartbeat replies can turn video off but cannot start it. Enable
 remote `video:on` only after the home service has a verified Park signal.
 
 ## Installation gates
+
+For portal isolation, run `sudo bash tools/install_web_privileges.sh <desktop-user>`
+while no portal session is active. It creates the no-sudo `car-portal` account,
+sets separate `PORTAL_USER`/`DISPLAY_USER` values, and adds explicit sidecar
+sudo rules. Portal X11 uses an authorization cookie instead of `-ac`.
+The installer preserves upstream sudo policy: a pre-existing blanket grant
+to `www-data` or the desktop account still dominates the narrow sidecar rules.
+The authenticated web/proxy entry point remains the external security boundary.
+Audit those blanket grants before claiming least-privilege isolation for the
+whole TeslaUSB UI; this bundle does not silently revoke upstream commands.
 
 1. Follow the pinned-source, spare-drive sequence in [IMAGE_PLAN.md](IMAGE_PLAN.md).
    Back up the working SD image and verify the external SSD can be reused

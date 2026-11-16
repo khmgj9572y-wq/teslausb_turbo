@@ -17,7 +17,8 @@ def status(policy):
         remaining = max(0, int(policy["max_session_seconds"] -
                                (car_policy.uptime() - started.get("uptime", 0))))
     return {"ok": True, "active": active, "airplay_active": display_owner.busy(), "remaining_seconds": remaining,
-            "max_session_minutes": policy["max_session_seconds"] // 60 or None}
+            "max_session_minutes": policy["max_session_seconds"] // 60 or None,
+            'max_lte_session_minutes': policy.get('max_lte_session_seconds', 7200) // 60}
 
 
 def act(policy, action, request):
