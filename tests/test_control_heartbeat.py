@@ -111,6 +111,37 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(car_control.tick(self.config), 'video allowed')
         ctl.assert_not_called()
 
+    def test_lte_budget_accumulates_only_cellular_time_and_does_not_reset_on_wifi(self):
+        config = {'net_root': Path('/unused')}
+        started = {}
+        with mock.patch.object(car_policy, 'find_lte_interface', return_value=Path('/unused/usb1')):
+            self.assertEqual(car_control.lte_elapsed(started, config, 100, 'usb1'), 0)
+            self.assertEqual(car_control.lte_elapsed(started, config, 200, 'usb1'), 100)
+            self.assertEqual(car_control.lte_elapsed(started, config, 250, 'wifi'), 150)
+            self.assertEqual(car_control.lte_elapsed(started, config, 350, 'wifi'), 150)
+            self.assertEqual(car_control.lte_elapsed(started, config, 400, 'usb1'), 150)
+            self.assertEqual(car_control.lte_elapsed(started, config, 500, 'usb1'), 250)
+
+    def test_lte_budget_stops_video_despite_successful_home_heartbeat(self):
+        self.config.update(max_session_seconds=0, max_lte_session_seconds=7200)
+        root = Path(self.temp.name)
+        with mock.patch.object(car_policy, 'update_meter', return_value={'bytes': 0}), \
+             mock.patch.object(car_policy, 'current_throttle_flags', return_value=0), \
+             mock.patch.object(car_policy, 'active_link', return_value='usb1'), \
+             mock.patch.object(car_policy, 'uptime', return_value=8000), \
+             mock.patch.object(car_control, 'wg_route', return_value=True), \
+             mock.patch.object(car_control, 'video_active', return_value=True), \
+             mock.patch.object(car_control, 'boot_id', return_value='boot-a'), \
+             mock.patch.object(car_control, 'systemctl', return_value=True) as ctl, \
+             mock.patch.object(car_control, 'VIDEO_START', root / 'start.json'), \
+             mock.patch.object(car_control, 'HEARTBEAT_STATE', root / 'hb.json'), \
+             mock.patch.object(car_control, 'RUNTIME', root):
+            car_policy.write_json(car_control.VIDEO_START, {'boot': 'boot-a', 'uptime': 100,
+                'lte_elapsed_seconds': 7150, 'lte_sample_uptime': 7900, 'lte_was_active': True})
+            car_policy.write_json(car_control.HEARTBEAT_STATE, {'last_success_uptime': 7990})
+            self.assertEqual(car_control.tick(self.config), 'video stopped: LTE session limit')
+        ctl.assert_any_call('stop', 'car-video.service')
+
 
 class HeartbeatTests(unittest.TestCase):
     def test_redirect_is_refused(self):

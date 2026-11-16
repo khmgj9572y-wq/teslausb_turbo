@@ -3,11 +3,19 @@
 # through noVNC; the Pi's browser traffic uses the new Wi-Fi connection.
 
 user=${PORTAL_USER:?Set PORTAL_USER in /etc/teslausb-car-wifi.env}
+[[ "$user" = car-portal ]] || { echo 'Portal requires its dedicated no-sudo account' >&2; exit 1; }
 state=/run/car-wifi-portal
-portal_home=/mutable/car-link/portal-browser
-mkdir -p "$state" "$portal_home"
-chmod 700 "$state" "$portal_home"
-chown "$user" "$portal_home"
+portal_home=/mutable/car-wifi-portal-browser
+mkdir -p "$state" "$state/display" "$portal_home"
+chmod 755 "$state"
+chown root:root "$state"
+chmod 700 "$state/display" "$portal_home"
+chown "$user" "$state/display" "$portal_home"
+authority="$state/display/Xauthority"
+cookie=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+runuser -u "$user" -- xauth -f "$authority" add :98 . "$cookie" >/dev/null 2>&1
+unset cookie
+export XAUTHORITY="$authority"
 
 endpoint=$(python3 - <<'PY'
 import configparser, ipaddress
@@ -46,7 +54,7 @@ ip route add default via "$wifi_gw" dev "$wifi_if" metric 550
 
 runuser -u "$user" -- env HOME="$portal_home" XDG_CONFIG_HOME="$portal_home/config" \
   XDG_CACHE_HOME="$portal_home/cache" /usr/bin/Xvfb :98 -screen 0 1280x720x24 \
-  -nolisten tcp -ac &
+  -nolisten tcp -auth "$authority" &
 xvfb_pid=$!
 sleep 1
 kill -0 "$xvfb_pid"
@@ -54,7 +62,7 @@ kill -0 "$xvfb_pid"
 runuser -u "$user" -- env HOME="$portal_home" XDG_CONFIG_HOME="$portal_home/config" \
   DISPLAY=:98 /usr/bin/openbox &
 runuser -u "$user" -- env HOME="$portal_home" DISPLAY=:98 \
-  /usr/bin/x11vnc -display :98 -localhost -rfbport 5901 -nopw -forever -shared -quiet &
+  /usr/bin/x11vnc -display :98 -auth "$authority" -localhost -rfbport 5901 -nopw -forever -shared -quiet &
 runuser -u "$user" -- /usr/bin/websockify --web=/usr/share/novnc \
   127.0.0.1:6080 127.0.0.1:5901 &
 

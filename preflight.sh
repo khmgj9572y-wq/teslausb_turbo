@@ -31,7 +31,7 @@ done
 section 'Pi undervoltage / throttling flags'
 vcgencmd get_throttled 2>/dev/null || true
 
-section 'Web file browser mounts'
+section 'Web file browser mounts (configuration only)'
 if [ -e /backingfiles/music_disk.bin ] || [ -e /backingfiles/lightshow_disk.bin ] ||
    [ -e /backingfiles/boombox_disk.bin ]; then
     missing=
@@ -39,11 +39,15 @@ if [ -e /backingfiles/music_disk.bin ] || [ -e /backingfiles/lightshow_disk.bin 
     [ -f /etc/auto.master.d/www.autofs ] || missing="$missing /etc/auto.master.d/www.autofs"
     [ -x /root/bin/auto.www ] || missing="$missing /root/bin/auto.www"
     if [ -n "$missing" ]; then
-        echo "FAIL: drive images exist but the file browser mounts are missing:$missing"
-        echo "      rerun TeslaUSB's web setup step after the images are in place (IMAGE_PLAN.md)"
+        echo "FAIL: file browser mount configuration is missing:$missing"
+    elif ! grep -Eq '^[[:space:]]*/var/www/html/fs[[:space:]]+/root/bin/auto[.]www([[:space:]]|$)' /etc/auto.master.d/www.autofs; then
+        echo 'FAIL: browser autofs master map does not point to the expected executable'
+    elif ! systemctl is-active --quiet autofs.service; then
+        echo 'FAIL: browser mount configuration exists, but autofs is inactive'
     else
-        echo "OK: file browser mounts configured"
+        echo 'CONFIGURED: reload autofs after repair and verify an actual protected browser listing'
     fi
+    echo 'See IMAGE_PLAN.md; this probe does not mount images or prove a working browser listing.'
 else
-    echo "no music/lightshow/boombox image; file browser mounts not expected"
+    echo 'No music/lightshow/boombox image; file browser mounts not expected'
 fi

@@ -1,6 +1,8 @@
 import importlib.util
 import os
 import sqlite3
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -127,7 +129,8 @@ class QueueTests(unittest.TestCase):
         transfers = [call.args[0] for call in run.call_args_list if call.args[0][0] == "rsync"]
         self.assertEqual(transfers[0][-2], "./SavedClips/2026-11-08_12-00-00/thumb.png")
         self.assertEqual(transfers[1][-2], "./SavedClips/2026-11-08_12-00-00/event.json")
-        self.assertIn("--ignore-existing", transfers[0])
+        self.assertNotIn("--ignore-existing", transfers[0])
+        self.assertIn('--checksum', transfers[0])
         self.assertIn("--partial-dir=.partial", transfers[0])
         self.assertEqual(transfers[0][-1], "teslaintake@192.0.2.10:./")
         self.assertTrue(all(call.args[0][0] != "ssh" for call in run.call_args_list))
@@ -161,6 +164,75 @@ class QueueTests(unittest.TestCase):
              mock.patch.object(event_queue.subprocess, "run", side_effect=results):
             self.assertEqual(event_queue.send(self.config, self.db), 0)
         self.assertEqual(self.db.execute("SELECT status FROM files").fetchone()[0], "pending")
+
+    def test_poison_file_does_not_block_other_files_and_has_retry_backoff(self):
+        self.add_link('SavedClips', '2026-11-08_12-00-00', 'event.json', b'{}')
+        self.add_link('SavedClips', '2026-11-08_12-00-00', 'test-front.mp4', b'video')
+        event_queue.scan(self.config, self.db)
+        def fake_run(args, **kwargs):
+            failed = args[0] == 'rsync' and args[-2].endswith('event.json')
+            return mock.Mock(returncode=12 if failed else 0, stdout='', stderr='failure' if failed else '')
+        with mock.patch.object(event_queue, 'vpn_route_ok', return_value=True), \
+             mock.patch.object(event_queue.subprocess, 'run', side_effect=fake_run) as run:
+            self.assertEqual(event_queue.send(self.config, self.db), 1)
+            run.reset_mock()
+            self.assertEqual(event_queue.send(self.config, self.db), 0)
+            self.assertFalse(any(c.args[0][0] == 'rsync' for c in run.call_args_list))
+        rows = self.db.execute('SELECT status,failures,retry_uptime FROM files WHERE path LIKE ?',
+                               ('%event.json',)).fetchone()
+        self.assertEqual(rows[:2], ('pending', 1)); self.assertGreater(rows[2], 0)
+
+    def test_corrupt_spool_copy_is_not_sent_and_original_is_available_for_restage(self):
+        original, link = self.add_link('SavedClips', '2026-11-08_12-00-00', 'event.json', b'{}')
+        event_queue.scan(self.config, self.db)
+        destination = self.spool / 'SavedClips' / link.parent.name / link.name
+        destination.write_text('bad data')
+        with mock.patch.object(event_queue, 'vpn_route_ok', return_value=True), \
+             mock.patch.object(event_queue.subprocess, 'run', return_value=mock.Mock(returncode=0)) as run:
+            self.assertEqual(event_queue.send(self.config, self.db), 0)
+            self.assertFalse(any(c.args[0][0] == 'rsync' for c in run.call_args_list))
+        self.assertEqual(original.read_bytes(), b'{}')
+        self.assertEqual(event_queue.scan(self.config, self.db)[0], 1)
+
+    def test_sent_sidecars_skip_revalidation_and_orphan_staging_files_are_removed(self):
+        self.add_link('SavedClips', '2026-11-08_12-00-00', 'event.json', b'{}')
+        event_queue.scan(self.config, self.db)
+        self.db.execute("UPDATE files SET status='sent'"); self.db.commit()
+        orphan = self.spool / '.staging-interrupted'; orphan.write_text('partial')
+        with mock.patch.object(event_queue, 'valid_sidecar') as validate:
+            self.assertEqual(event_queue.scan(self.config, self.db), (0, 0))
+            validate.assert_not_called()
+        self.assertFalse(orphan.exists())
+
+    def test_snapshot_gaps_count_as_distinct_stable_observations(self):
+        self.config['stable_mp4_snapshots'] = 2
+        relative = Path('SavedClips/test/test-front.mp4')
+        stat = mock.Mock(st_size=100, st_mtime_ns=200)
+        self.assertFalse(event_queue.mp4_stable_in_snapshots(self.db, relative,
+            self.snapshots / 'snap-000001' / 'test-front.mp4', stat, 2))
+        self.assertTrue(event_queue.mp4_stable_in_snapshots(self.db, relative,
+            self.snapshots / 'snap-000003' / 'test-front.mp4', stat, 2))
+
+    @unittest.skipUnless(shutil.which('rsync'), 'rsync is needed for the real transfer check')
+    def test_real_rsync_replaces_different_same_size_and_mtime_staging_file(self):
+        _, link = self.add_link('SavedClips', '2026-11-08_12-00-00', 'event.json', b'{"x":2}')
+        event_queue.scan(self.config, self.db)
+        local = self.spool / 'SavedClips' / link.parent.name / link.name
+        remote = Path(self.temp.name) / 'remote'
+        dest = remote / 'SavedClips' / link.parent.name / link.name
+        dest.parent.mkdir(parents=True); dest.write_bytes(b'{"x":1}')
+        os.utime(dest, ns=(local.stat().st_atime_ns, local.stat().st_mtime_ns))
+        original_run = subprocess.run
+        def local_transfer(args, **kwargs):
+            if args[0] != 'rsync': return mock.Mock(returncode=1)
+            args = list(args); position = args.index('-e'); del args[position:position + 2]
+            args[-1] = str(remote) + '/'
+            return original_run(args, **kwargs)
+        with mock.patch.object(event_queue, 'vpn_route_ok', return_value=True), \
+             mock.patch.object(event_queue.subprocess, 'run', side_effect=local_transfer):
+            self.assertEqual(event_queue.send(self.config, self.db), 1)
+        self.assertEqual(dest.read_bytes(), b'{"x":2}')
+        self.assertEqual(int(dest.stat().st_mtime), int(local.stat().st_mtime))
 
     def test_home_wifi_pauses_lte_upload(self):
         self.add_link("SentryClips", "2026-11-08_12-00-00", "event.json", b"{}")

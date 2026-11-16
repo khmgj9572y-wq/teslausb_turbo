@@ -85,8 +85,8 @@ def apply_writable(interface, mac):
     settings = radio_policy.settings()
     hotspot_mac = hotspot_target(settings, mac)
     user = Path('/etc/teslausb-car-wifi.env').read_text()
-    match = re.search(r'^PORTAL_USER=([A-Za-z0-9_-]+)$', user, re.M)
-    if not match:
+    match = re.search(r'^DISPLAY_USER=([A-Za-z0-9_-]+)$', user, re.M) or re.search(r'^PORTAL_USER=([A-Za-z0-9_-]+)$', user, re.M)
+    if not match or match.group(1) == 'car-portal':
         raise RuntimeError('Non-root receiver account is not configured')
     account = pwd.getpwnam(match.group(1))
     managed = wifi_admin.metadata()

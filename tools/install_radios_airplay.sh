@@ -6,9 +6,11 @@ test -e /teslausb/TESLAUSB_SETUP_FINISHED
 mountpoint -q /mutable
 test -f /etc/teslausb-car-link.ini
 . /etc/teslausb-car-wifi.env
-id "$PORTAL_USER" >/dev/null
-stage_uid=$(id -u "$PORTAL_USER")
-stage_gid=$(id -g "$PORTAL_USER")
+desktop_user=${DISPLAY_USER:-$PORTAL_USER}
+[ "$desktop_user" != car-portal ] || { echo 'Set DISPLAY_USER to the desktop account' >&2; exit 1; }
+id "$desktop_user" >/dev/null
+stage_uid=$(id -u "$desktop_user")
+stage_gid=$(id -g "$desktop_user")
 test "$stage_uid" -ne 0
 stage_root_ro=false
 case ",$(findmnt -no OPTIONS /)," in *,ro,*) stage_root_ro=true ;; esac
@@ -94,14 +96,14 @@ install -d -m 700 -o "$stage_uid" -g "$stage_gid" \
   "$stage_airplay_dir" "$stage_airplay_dir/config" "$stage_airplay_dir/cache"
 install -m 644 "$src/systemd/car-hotspot.service" \
   "$src/systemd/car-hotspot-dhcp.service" /etc/systemd/system/
-sed -e "s/REPLACE_WITH_OS_USER/$PORTAL_USER/g" -e "s/REPLACE_WITH_OS_UID/$stage_uid/g" \
+sed -e "s/REPLACE_WITH_OS_USER/$desktop_user/g" -e "s/REPLACE_WITH_OS_UID/$stage_uid/g" \
   "$src/systemd/car-airplay.service" > /etc/systemd/system/car-airplay.service
 chmod 644 /etc/systemd/system/car-airplay.service
 install -m 644 "$src/web/moonlight/index.html" /var/www/html/moonlight/index.html
 systemctl daemon-reload
 for plugin in v4l2h264dec v4l2convert waylandsink
 do
-  runuser -u "$PORTAL_USER" -- env HOME="$stage_airplay_dir" \
+  runuser -u "$desktop_user" -- env HOME="$stage_airplay_dir" \
     XDG_CACHE_HOME="$stage_airplay_dir/cache" gst-inspect-1.0 "$plugin" >/dev/null
 done
 echo 'Radio and AirPlay code staged; active Wi-Fi settings were not rebound.'

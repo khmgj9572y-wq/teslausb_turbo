@@ -3,7 +3,8 @@
 
 Never cuts a session off: an idle session simply stops counting, and the car may sleep as usual.
 A session (logind, Service=sshd, Remote=yes, State active/online, older than MIN_AGE) is IN USE if, within IDLE seconds, it had
-terminal input or output (pts atime/mtime), used >= CPU_BUSY seconds of CPU in its scope (a running job), or just logged in.
+terminal input (pts atime), used >= CPU_BUSY seconds of CPU in its scope, or just logged in.
+Each login has a three-hour maximum wake allowance; daemon restarts do not renew it.
 While any session is in use: BLE "charge-port-close" nudge (TeslaUSB's own keep-awake command) every NUDGE seconds.
 Skips a nudge while TeslaUSB's own keep-awake task (/tmp/keep_awake_task_pid) is running. Never closes or touches sessions.
   ssh-keepawake            run (systemd service)
@@ -14,6 +15,7 @@ import json, os, re, subprocess, sys, time
 from pathlib import Path
 
 POLL, IDLE, MIN_AGE, NUDGE, CPU_BUSY = 30, 15 * 60, 60, 240, 2.0
+MAX_SESSION_AGE = 3 * 3600
 STATE = Path('/run/ssh-keepawake/state.json')
 VARS = Path('/root/teslausb_setup_variables.conf')
 TESLA = '/root/bin/tesla-control'; KEY = '/root/.ble/key_private.pem'
@@ -66,7 +68,7 @@ def tty_age(props):
     tty = props.get('TTY', '')
     if not tty.startswith('pts/'): return None
     try:
-        st = os.stat('/dev/' + tty); return time.time() - max(st.st_atime, st.st_mtime)
+        st = os.stat('/dev/' + tty); return time.time() - st.st_atime
     except OSError:
         return None
 
@@ -88,6 +90,10 @@ def wrapper_missing():
 
 def session_activity(props, history, now):
     age = now - int(props.get('TimestampMonotonic', '0') or 0) / 1e6
+    # This is anchored to logind's login timestamp, so restarting this daemon
+    # cannot renew an old tail/watch/tmux session's battery wake allowance.
+    if age < MIN_AGE or age >= MAX_SESSION_AGE:
+        return []
     cpu = cpu_seconds(props)
     if cpu is not None:
         history.append((now, cpu))
@@ -97,8 +103,6 @@ def session_activity(props, history, now):
     terminal_age = tty_age(props)
     typed = terminal_age is not None and 0 <= terminal_age < IDLE
     fresh = 0 <= age < IDLE
-    if age < MIN_AGE:
-        return []
     return [reason for reason, active in (('tty', typed), ('cpu', busy), ('new', fresh)) if active]
 
 

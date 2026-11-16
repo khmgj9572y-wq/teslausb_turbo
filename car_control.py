@@ -97,6 +97,17 @@ def append_power_log(config, flags, up):
             up, "unknown" if flags is None else "0x{:x}".format(flags)))
 
 
+def lte_elapsed(started, config, up, link=None):
+    iface = car_policy.find_lte_interface(config) if 'net_root' in config else None
+    on_lte = iface is not None and (link or car_policy.active_link(config)) == iface.name
+    total = float(started.get('lte_elapsed_seconds', 0))
+    last = float(started.get('lte_sample_uptime', up))
+    if started.get('lte_was_active'):
+        total += max(0, up - last)
+    started.update(lte_elapsed_seconds=total, lte_sample_uptime=up, lte_was_active=on_lte)
+    return total
+
+
 def tick(config):
     meter = car_policy.update_meter(config)
     active = video_active(config)
@@ -134,6 +145,11 @@ def tick(config):
     if started.get("boot") != boot:
         mark_video_start()
         started = car_policy.read_json(VIDEO_START)
+    cellular_time = lte_elapsed(started, config, up)
+    car_policy.write_json(VIDEO_START, started)
+    if cellular_time >= config.get('max_lte_session_seconds', 120 * 60):
+        systemctl('stop', config['video_service'])
+        return 'video stopped: LTE session limit'
     if (config["max_session_seconds"] > 0 and
             up - float(started.get("uptime", up)) >= config["max_session_seconds"]):
         systemctl("stop", config["video_service"])

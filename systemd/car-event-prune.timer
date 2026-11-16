@@ -4,7 +4,6 @@ Description=Prune sent cellular upload copies every ten minutes
 [Timer]
 OnBootSec=10min
 OnUnitActiveSec=10min
-Persistent=true
 Unit=car-event-prune.service
 
 [Install]

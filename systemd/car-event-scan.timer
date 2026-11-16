@@ -5,7 +5,6 @@ Description=Scan TeslaUSB snapshots every minute
 OnBootSec=2min
 OnUnitActiveSec=1min
 AccuracySec=10s
-Persistent=true
 Unit=car-event-scan.service
 
 [Install]

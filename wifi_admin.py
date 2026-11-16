@@ -18,6 +18,7 @@ import uuid as uuidlib
 from pathlib import Path
 
 import radio_policy
+import car_policy
 
 
 STORE = Path("/mutable/car-link/wifi")
@@ -109,7 +110,12 @@ def save_metadata(profiles):
 
 
 def keyfile_value(value):
-    return value.replace("\\", "\\\\").replace(";", "\\;")
+    escaped = value.replace("\\", "\\\\").replace(";", "\\;")
+    start = len(escaped) - len(escaped.lstrip(' '))
+    end = len(escaped.rstrip(' '))
+    if start == len(escaped):
+        return '\\s' * start
+    return '\\s' * start + escaped[start:end] + '\\s' * (len(escaped) - end)
 
 
 def validate_ssid(value):
@@ -180,17 +186,45 @@ def internet_on_wifi():
     return result.returncode == 0 and result.stdout == "204"
 
 
-def promote(identifier):
+def set_priority(identifier, metric):
     source = profile_file(identifier)
-    text = source.read_text()
-    if "autoconnect=false" in text and text.count("route-metric=800") == 2:
-        text = text.replace("autoconnect=false", "autoconnect=true")
-        text = text.replace("route-metric=800", "route-metric=600")
-        atomic_write(source, text.encode("utf-8"))
-    elif "autoconnect=true" not in text or text.count("route-metric=600") != 2:
-        raise RuntimeError("Stored network is not in the expected state")
+    import configparser
+    import io
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read_string(source.read_text())
+    parser['connection']['autoconnect'] = 'true'
+    for family in ('ipv4', 'ipv6'):
+        parser[family]['route-metric'] = str(metric)
+    output = io.StringIO(); parser.write(output)
+    atomic_write(source, output.getvalue().encode('utf-8'))
     stage(identifier)
     nmcli("device", "reapply", radio_policy.require_uplink())
+
+
+def promote(identifier):
+    set_priority(identifier, 600)
+
+
+def recheck_connection(profiles):
+    if not profiles:
+        return None
+    result = nmcli('-g', 'GENERAL.CON-UUID', 'device', 'show', radio_policy.require_uplink(), check=False)
+    identifier = result.stdout.strip()
+    if identifier not in profiles:
+        return None
+    profile = profiles[identifier]
+    full = internet_on_wifi()
+    if profile.get('state') == 'ready' and not full:
+        set_priority(identifier, 800)
+        profile['state'] = 'portal'
+        save_metadata(profiles)
+        return 'demoted'
+    if profile.get('state') == 'portal' and full:
+        promote(identifier)
+        profile['state'] = 'ready'
+        save_metadata(profiles)
+        return 'promoted'
+    return None
 
 
 def connect(identifier, profiles):
@@ -295,9 +329,14 @@ def remove(identifier, profiles):
 
 def expire():
     ensure_store()
+    profiles = metadata()
+    try:
+        recheck_connection(profiles)
+    except RuntimeError:
+        # Missing/disconnected radios should not prevent expiry of old profiles.
+        pass
     if not synced():
         return {"ok": True, "expired": 0, "clock_ready": False}
-    profiles = metadata()
     now = int(time.time())
     expired = [identifier for identifier, profile in profiles.items()
                if profile.get("expires") is not None and profile["expires"] <= now]
@@ -408,7 +447,7 @@ def read_request():
     return value
 
 
-def main():
+def dispatch():
     if os.geteuid() != 0:
         raise RuntimeError("Root access is required")
     if len(sys.argv) != 2:
@@ -451,6 +490,12 @@ def main():
     else:
         raise ValueError("Unknown action")
     print(json.dumps(response, separators=(",", ":")))
+
+
+def main():
+    ensure_store()
+    with car_policy.file_lock(STORE / 'profiles.lock'):
+        dispatch()
 
 
 if __name__ == "__main__":

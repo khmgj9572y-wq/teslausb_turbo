@@ -22,5 +22,3 @@ ExecStart=/usr/local/lib/teslausb-car-link/player.sh
 ExecStartPost=+/usr/local/lib/teslausb-car-link/car_control.py mark-video-start
 Restart=no
 
-[Install]
-WantedBy=multi-user.target

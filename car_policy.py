@@ -34,6 +34,7 @@ def load_policy(path):
         "power_log": Path(section.get("power_log", "/mutable/car-link-power.log")),
         "video_service": section.get("video_service", "car-video.service"),
         "max_session_seconds": section.getint("max_session_min", fallback=0) * 60,
+        "max_lte_session_seconds": section.getint('max_lte_session_min', fallback=120) * 60,
         "max_handshake_age_seconds": section.getint("max_handshake_age_seconds", fallback=180),
         "intake_wg_ip": section.get("intake_wg_ip", "").strip(),
         "sunshine_wg_ip": section.get("sunshine_wg_ip", "").strip(),
@@ -42,12 +43,13 @@ def load_policy(path):
         "heartbeat_url": section.get("heartbeat_url", "").strip(),
         "remote_video_on_enabled": section.getboolean(
             "remote_video_on_enabled", fallback=False),
-        "ntp_marker": section.get("ntp_marker", "").strip(),
     }
     if values["soft_cap_bytes"] <= 0 or values["hard_cap_bytes"] <= values["soft_cap_bytes"]:
         raise ValueError("hard_cap_gb must exceed a positive soft_cap_gb")
     if values["max_session_seconds"] < 0:
         raise ValueError("max_session_min must be nonnegative; zero disables the hard limit")
+    if values['max_lte_session_seconds'] <= 0:
+        raise ValueError('max_lte_session_min must be positive')
     if values["max_handshake_age_seconds"] <= 0:
         raise ValueError("max_handshake_age_seconds must be positive")
     return values
@@ -102,9 +104,6 @@ def find_lte_interface(config):
 
 
 def ntp_synced(config):
-    marker = config.get("ntp_marker", "")
-    if marker and Path(marker).exists():
-        return True
     try:
         result = subprocess.run(
             ["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
@@ -128,7 +127,18 @@ def update_meter(config, boot=None, month=None, sync=None):
     month = (month or utc_month()) if sync else None
     try:
         with file_lock(str(path) + ".lock"):
-            state = read_json(path)
+            try:
+                state = json.loads(path.read_text())
+                if not isinstance(state, dict) or type(state.get('bytes')) is not int or state['bytes'] < 0:
+                    raise ValueError('Invalid meter')
+                if any(type(state[key]) is not int or state[key] < 0 for key in ('rx', 'tx', 'ifindex') if key in state):
+                    raise ValueError('Invalid counters')
+                if state.get('month') is not None and not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', str(state['month'])):
+                    raise ValueError('Invalid meter month')
+            except FileNotFoundError:
+                state = {'bytes': 0}
+            except (OSError, ValueError):
+                return {'meter_unavailable': True, 'link_present': False, 'bytes': config['hard_cap_bytes']}
             iface = find_lte_interface(config)
             if iface is None:
                 state["link_present"] = False
@@ -139,7 +149,7 @@ def update_meter(config, boot=None, month=None, sync=None):
                 tx = int((iface / "statistics" / "tx_bytes").read_text())
                 ifindex = int((iface / "ifindex").read_text())
             except (OSError, ValueError):
-                return state
+                return dict(state, meter_unavailable=True)
             old_month = state.get("month")
             if month and old_month and month > old_month:
                 state["bytes"] = 0
@@ -163,6 +173,8 @@ def update_meter(config, boot=None, month=None, sync=None):
 
 
 def cap_mode(config, state):
+    if state.get('meter_unavailable') or state.get('storage_unavailable'):
+        return 'hard'
     used = int(state.get("bytes", 0))
     if used >= config["hard_cap_bytes"]:
         return "hard"
