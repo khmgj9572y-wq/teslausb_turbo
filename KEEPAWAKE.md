@@ -54,8 +54,11 @@ logs a warning at start, and re-running the installer restores it
 Bluetooth adapter and leave the onboard UART controller to `tesla-control`.
 Controller numbers can swap at boot. The wrapper resolves the UART path
 through sysfs, excludes USB paths, and explicitly adds `-bt-adapter hciN`
-unless an adapter was supplied by the caller. With no UART it logs and runs
-without adding a flag. The lock name remains `/run/lock/hci0.lock` for
+unless the caller supplied one. The pin is hard: with no onboard UART adapter
+the wrapper refuses (exit 69, logged under `tesla-control-lock`) rather than
+let the car key fall onto a USB controller, and a caller-supplied
+`-bt-adapter` is accepted only when it names the onboard adapter. Keep every
+other Bluetooth user on USB adapters. The lock name remains `/run/lock/hci0.lock` for
 compatibility with existing car-key BlueZ users.
 
 After an upstream reinstall, the lock installer preserves the older `.real`
