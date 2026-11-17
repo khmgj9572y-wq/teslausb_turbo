@@ -53,6 +53,11 @@ class LockTests(unittest.TestCase):
                         LOCK_PATH=str(self.lock), TESLA_CONTROL_LOCK_WAIT='0.1',
                         LOGGER_LOG=str(self.root / 'logger.log'))
 
+    def uart(self, name='hci0', bus='serial0'):
+        device = self.root / 'devices' / bus / 'bluetooth' / name
+        device.mkdir(parents=True)
+        (self.root / 'sys/class/bluetooth' / name).symlink_to(device)
+
     def install(self, **env):
         return subprocess.run(['bash', str(self.root / 'tools/install_hci0_lock.sh')],
                               env=dict(self.env, **env), capture_output=True, text=True, timeout=5)
@@ -80,6 +85,7 @@ class LockTests(unittest.TestCase):
         real = Path(str(self.binary) + '.real')
         real.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGS_LOG"\n')
         real.chmod(0o755)
+        self.uart()
         wrapper = self.root / 'tools/tesla-control-hci0-lock.sh'
         args = ['-ble', 'value with spaces']
         record = self.root / 'args'
@@ -91,13 +97,11 @@ class LockTests(unittest.TestCase):
             self.assertFalse(record.exists())
         free = subprocess.run([str(wrapper), *args], env=env, capture_output=True, timeout=3)
         self.assertEqual(free.returncode, 0)
-        self.assertEqual(record.read_text().splitlines(), args)
+        self.assertEqual(record.read_text().splitlines(), ['-bt-adapter', 'hci0', *args])
 
     def test_uart_is_selected_instead_of_usb_even_when_numbering_changes(self):
         for name, bus in [('hci0', 'usb1'), ('hci4', 'serial0')]:
-            device = self.root / 'devices' / bus / 'bluetooth' / name
-            device.mkdir(parents=True)
-            (self.root / 'sys/class/bluetooth' / name).symlink_to(device)
+            self.uart(name, bus)
         real = Path(str(self.binary) + '.real')
         real.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGS_LOG"\n'); real.chmod(0o755)
         record = self.root / 'args'
@@ -105,15 +109,23 @@ class LockTests(unittest.TestCase):
         wrapper = self.root / 'tools/tesla-control-hci0-lock.sh'
         subprocess.run([str(wrapper), '-ble', 'ping'], env=env, check=True, timeout=3)
         self.assertEqual(record.read_text().splitlines(), ['-bt-adapter', 'hci4', '-ble', 'ping'])
-        for flags in [['-bt-adapter', 'hci7'], ['--bt-adapter=hci7']]:
+        # A caller may name the onboard adapter itself; any other adapter is refused (hard pin).
+        for flags in [['-bt-adapter', 'hci4'], ['--bt-adapter=hci4']]:
             subprocess.run([str(wrapper), *flags, 'ping'], env=env, check=True, timeout=3)
             self.assertEqual(record.read_text().splitlines(), flags + ['ping'])
+        record.unlink()
+        for flags in [['-bt-adapter', 'hci0'], ['--bt-adapter=hci0'], ['-bt-adapter', 'hci7'], ['ping', '-bt-adapter']]:
+            refused = subprocess.run([str(wrapper), *flags, 'ping'], env=env, capture_output=True, text=True, timeout=3)
+            self.assertEqual(refused.returncode, 69, flags)
+            self.assertFalse(record.exists(), flags)
 
-    def test_no_uart_logs_and_preserves_the_bare_fallback(self):
+    def test_no_uart_refuses_and_never_runs_unpinned(self):
         real = Path(str(self.binary) + '.real')
         real.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$ARGS_LOG"\n'); real.chmod(0o755)
+        self.uart('hci1', 'usb1')   # only a USB controller present
         record = self.root / 'args'
-        subprocess.run([str(self.root / 'tools/tesla-control-hci0-lock.sh'), 'ping'],
-                       env=dict(self.env, ARGS_LOG=str(record)), check=True, timeout=3)
-        self.assertEqual(record.read_text().splitlines(), ['ping'])
-        self.assertIn('no onboard UART', (self.root / 'logger.log').read_text())
+        result = subprocess.run([str(self.root / 'tools/tesla-control-hci0-lock.sh'), 'ping'],
+                                env=dict(self.env, ARGS_LOG=str(record)), capture_output=True, text=True, timeout=3)
+        self.assertEqual(result.returncode, 69)
+        self.assertFalse(record.exists())
+        self.assertIn('refused: no onboard UART', (self.root / 'logger.log').read_text())
